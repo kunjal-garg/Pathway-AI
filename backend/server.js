@@ -54,10 +54,18 @@ app.post("/api/analyze-gap", async function (req, res) {
   try {
     var body = req.body || {};
     var jobUrl = body.jobUrl;
+    var targetRole = body.targetRole;
+    var industry = body.industry;
+    var company = body.company;
     var resumeText = body.resumeText;
     var assessmentAnswers = body.assessmentAnswers;
 
-    var jobProfile = await jobService.extractJobProfileFromUrl(jobUrl);
+    var jobProfile = await jobService.extractJobProfileFromUrl({
+      jobUrl: jobUrl,
+      targetRole: targetRole,
+      industry: industry,
+      company: company,
+    });
     var resumeProfile = resumeService.parseResumeSkills(
       resumeText == null ? "" : String(resumeText)
     );
@@ -66,7 +74,7 @@ app.post("/api/analyze-gap", async function (req, res) {
       score: assessmentAnswers ? 70 : 50,
     };
 
-    var report = gapAnalysisService.generateGapReport(
+    var report = await gapAnalysisService.generateGapReport(
       resumeProfile,
       jobProfile,
       assessmentResults

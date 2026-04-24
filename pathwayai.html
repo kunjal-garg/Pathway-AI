@@ -354,7 +354,7 @@
       box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
     }
 
-    .auth-stack { display: flex; flex-direction: column; gap: 0.65rem; }
+    .auth-stack { display: flex; flex-direction: column; gap: 1rem; }
 
     .auth-panel { margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border); }
 
@@ -913,8 +913,9 @@
 
     .profile-card-badge-recommended {
       position: absolute;
-      top: 0.65rem;
-      right: 0.65rem;
+      z-index: 2;
+      top: 0.5rem;
+      right: 0.55rem;
       font-size: 0.65rem;
       font-weight: 800;
       letter-spacing: 0.04em;
@@ -925,6 +926,15 @@
       border-radius: 999px;
       padding: 0.2rem 0.55rem;
       pointer-events: none;
+    }
+
+    .profile-card[data-mode="linkedin_export"] h3 {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 100%;
+      padding-right: 6.75rem;
+      box-sizing: border-box;
     }
 
     .linkedin-export-panel {
@@ -1042,6 +1052,13 @@
     }
 
     .profile-detail.open { display: block; }
+
+    #email-reveal {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    #email-reveal .auth-hint { margin-top: 0; }
 
     /* BUG 1: College email input explicitly full-width + reset */
     #email-reveal input#college-email {
@@ -1888,13 +1905,9 @@
       border: 0;
     }
   </style>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdn.insforge.dev/insforge-js/v2/insforge.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script>
-    // Configure PDF.js worker (same version).
-    window.__pdfjsWorkerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-  </script>
+  <!-- PDF.js: loaded on first parse via import("./vendor/pdf.min.mjs") — see getPdfjsModule in page script. -->
 </head>
 <body>
   <div class="app">
@@ -2108,10 +2121,15 @@
         <div class="goal-section">
           <div class="goal-section-label">Question 3</div>
           <h2>Dream companies <span style="color:var(--text-muted);font-size:0.85rem;font-weight:500;">(optional)</span></h2>
-          <div class="tags-input-wrap" id="goal-dream-wrap">
-            <div id="goal-dream-tags"></div>
-            <input type="text" id="goal-dream-input" placeholder="Type a company and press Enter…" />
+          <div class="search-wrap" id="goal-dream-combo-wrap">
+            <input type="text" class="role-input" id="goal-dream-search" placeholder="Search or select a company…" autocomplete="off" aria-autocomplete="list" aria-controls="goal-dream-suggestions" />
+            <div class="role-suggestions" id="goal-dream-suggestions" role="listbox" aria-label="Company suggestions" hidden></div>
           </div>
+          <div id="goal-dream-other-wrap" class="hidden" style="margin-top:0.75rem;">
+            <label for="goal-dream-other-input" style="display:block;font-size:0.8rem;color:var(--text-muted);margin-bottom:0.35rem;">Company name</label>
+            <input type="text" id="goal-dream-other-input" placeholder="Enter company name…" autocomplete="organization" />
+          </div>
+          <div id="goal-dream-tags" style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-top:0.75rem;" aria-live="polite"></div>
           <button type="button" class="skip-link" id="goal-dream-skip">Skip</button>
         </div>
 
@@ -2151,6 +2169,13 @@
             <div id="resume-parse-ui" style="margin-top:0.75rem;display:none;align-items:center;gap:0.6rem;color:var(--text-muted);font-size:0.9rem;">
               <div class="spinner" id="resume-parse-spinner" aria-hidden="true" style="width:18px;height:18px;border-width:2px;"></div>
               <span id="resume-parse-status">Reading your resume…</span>
+            </div>
+            <div id="resume-session-chooser" style="display:none;margin-top:0.75rem;" aria-hidden="true">
+              <p class="auth-hint" id="resume-session-chooser-line" style="display:block;">Resume from last session</p>
+              <div class="auth-stack" style="margin-top:0.5rem;gap:0.5rem;">
+                <button type="button" class="btn btn-primary btn-block" id="btn-resume-use-last">Use this resume</button>
+                <button type="button" class="btn btn-ghost btn-block" id="btn-resume-upload-new">Upload a new one</button>
+              </div>
             </div>
             <input type="file" id="resume-file" accept=".pdf,application/pdf" class="hidden" />
           </div>
@@ -2332,6 +2357,10 @@
               <button type="button" class="btn btn-secondary" id="btn-retake-assessment" style="flex-shrink:0;">Retake Assessment</button>
             </div>
           </div>
+          <div class="stat-card" id="dash-ai-insights" style="display:none;margin:0 0 1rem;padding:0.9rem 1rem;border-color:rgba(83,74,183,0.35);">
+            <p id="dash-strength-line" style="margin:0;font-size:0.92rem;line-height:1.45;"></p>
+            <p id="dash-gap-line" style="margin:0.4rem 0 0;font-size:0.9rem;color:var(--text-muted);line-height:1.45;"></p>
+          </div>
           <div class="chart-card">
             <h3>Skill gap snapshot</h3>
             <div id="skill-bars"></div>
@@ -2360,7 +2389,7 @@
           </div>
           <div class="stat-card weekly-track">
             <strong style="font-size:0.95rem;">Weekly goal</strong>
-            <p style="color:var(--text-muted);font-size:0.85rem;margin:0.35rem 0 0;">Complete 3 lessons this week</p>
+            <p id="dash-weekly-focus" style="color:var(--text-muted);font-size:0.85rem;margin:0.35rem 0 0;">Complete 3 lessons this week</p>
             <div class="track-bar"><div class="track-fill" id="weekly-fill"></div></div>
             <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.5rem;"><span id="weekly-done">2</span> of 3 done</p>
           </div>
@@ -2540,6 +2569,8 @@
     scanLineTimer: null,
     _learningModule: null,
     _lessonIndex: 0,
+    _resumePendingChooser: false,
+    _resumeFileLabel: null,
   };
 
   const ROLE_OPTIONS = [
@@ -2569,6 +2600,17 @@
     { k: "6 months", v: "6 months" },
     { k: "1 year", v: "1 year" },
     { k: "Just exploring", v: "Just exploring" }
+  ];
+
+  const DREAM_OTHER_LABEL = "Other - type your own";
+  const DREAM_COMPANY_CHOICES = [
+    "Google", "Meta", "Apple", "Microsoft", "Amazon", "Netflix", "Uber", "Airbnb", "Salesforce",
+    "Goldman Sachs", "McKinsey", "BCG", "Bain", "JPMorgan", "Morgan Stanley", "Deloitte",
+    "IBM", "Oracle", "Cisco", "Intel", "NVIDIA", "Tesla", "SpaceX", "Stripe", "Coinbase",
+    "Twitter/X", "LinkedIn", "Spotify", "Adobe", "Dropbox", "Palantir", "Snowflake",
+    "OpenAI", "Anthropic", "ByteDance", "TikTok", "Walmart", "Target", "Johnson & Johnson", "Pfizer",
+    "Visa", "Mastercard", "PayPal", "Shopify", "EY", "PwC", "KPMG", "BlackRock", "Citi", "Bank of America",
+    "Samsung", "Toyota", "Nike", "Disney", "Starbucks", "Atlassian", "Zoom", "SAP", "ServiceNow", "General Motors"
   ];
 
   const MANUAL_SKILL_CHIPS = [
@@ -2612,6 +2654,312 @@
   const APP_STATE_KEY = "pathwayai_state_v1";
   const AUTH_SESSION_KEY = "pathwayai_auth_session_v1";
   const CREDS_KEY = "pathwayai_creds_v1";
+  const PATHWAYAI_INSFORGE_USER_ID = "pathwayai_insforge_user_id";
+  const RESUME_GUEST_DATA_SS = "pathwayai_ss_resume_parsed";
+  const RESUME_CHOOSER_MUTED_SS = "pathwayai_ss_s4_resume_chooser_muted";
+  const RESUME_LINKEDIN_GUEST_SS = "pathwayai_ss_linkedin_bundle";
+  const LEGACY_RESUME_KEY = "pathwayai_resumeData";
+  const LEGACY_LINKEDIN_BUNDLE = "pathwayai_linkedinData";
+  const PRELIM_PREFIX = "pathwayai_prelim_scores__";
+  function _linkedinBundleKey(uid) {
+    return "pathwayai_linkedin_bundle__" + String(uid);
+  }
+
+  function getInsforgeUserIdForResume() {
+    try {
+      var s = localStorage.getItem(PATHWAYAI_INSFORGE_USER_ID);
+      return s && s.trim() ? s.trim() : null;
+    } catch (e) {
+      return null;
+    }
+  }
+  function setInsforgeUserIdForResume(uid) {
+    if (!uid || !String(uid).trim()) return;
+    var nu = String(uid).trim();
+    var prev = null;
+    try { prev = localStorage.getItem(PATHWAYAI_INSFORGE_USER_ID); } catch (e) {}
+    try {
+      localStorage.setItem(PATHWAYAI_INSFORGE_USER_ID, nu);
+    } catch (e2) {}
+    if (prev !== nu) migrateGuestResumeToScopedUser(nu);
+  }
+  function _resumeParsedKey(uid) {
+    return "pathwayai_resume_parsed__" + uid;
+  }
+  function _lastResumeInfoKey(uid) {
+    return "pathwayai_last_resume_info__" + uid;
+  }
+  function _prelimKey(uid) {
+    return uid ? (PRELIM_PREFIX + uid) : "pathwayai_prelim_ss";
+  }
+  function readScopedResumeParsed() {
+    var uid = getInsforgeUserIdForResume();
+    if (uid) {
+      try {
+        var g = localStorage.getItem(_resumeParsedKey(uid));
+        if (g) return JSON.parse(g);
+      } catch (e) {}
+      return null;
+    }
+    try {
+      var s = sessionStorage.getItem(RESUME_GUEST_DATA_SS);
+      if (s) return JSON.parse(s);
+    } catch (e2) {}
+    return null;
+  }
+  function writeScopedResumeParsed(obj, options) {
+    if (!obj || typeof obj !== "object") return;
+    var uid = getInsforgeUserIdForResume();
+    if (uid) {
+      try {
+        localStorage.setItem(_resumeParsedKey(uid), JSON.stringify(obj));
+      } catch (e) {}
+    } else {
+      try {
+        sessionStorage.setItem(RESUME_GUEST_DATA_SS, JSON.stringify(obj));
+      } catch (e2) {}
+    }
+  }
+  function readScopedLinkedinBundle() {
+    var uid = getInsforgeUserIdForResume();
+    if (uid) {
+      try {
+        var g = localStorage.getItem(_linkedinBundleKey(uid));
+        if (g) return JSON.parse(g);
+      } catch (e) {}
+      return null;
+    }
+    try {
+      var s = sessionStorage.getItem(RESUME_LINKEDIN_GUEST_SS);
+      if (s) return JSON.parse(s);
+    } catch (e2) {}
+    return null;
+  }
+  function writeScopedLinkedinBundle(obj) {
+    if (obj == null) return;
+    var uid = getInsforgeUserIdForResume();
+    if (uid) {
+      try { localStorage.setItem(_linkedinBundleKey(uid), JSON.stringify(obj)); } catch (e) {}
+    } else {
+      try { sessionStorage.setItem(RESUME_LINKEDIN_GUEST_SS, JSON.stringify(obj)); } catch (e2) {}
+    }
+  }
+  function tryRemoveLegacyLinkedinBundle() {
+    try {
+      if (localStorage.getItem(LEGACY_LINKEDIN_BUNDLE)) localStorage.removeItem(LEGACY_LINKEDIN_BUNDLE);
+    } catch (e) {}
+  }
+  function clearScopedResumeStorages() {
+    var uid = getInsforgeUserIdForResume();
+    if (uid) {
+      try {
+        localStorage.removeItem(_resumeParsedKey(uid));
+        localStorage.removeItem(_lastResumeInfoKey(uid));
+        localStorage.removeItem(_prelimKey(uid));
+        localStorage.removeItem(_linkedinBundleKey(uid));
+      } catch (e) {}
+    }
+    try {
+      sessionStorage.removeItem(RESUME_GUEST_DATA_SS);
+      sessionStorage.removeItem(RESUME_CHOOSER_MUTED_SS);
+      sessionStorage.removeItem(RESUME_LINKEDIN_GUEST_SS);
+      sessionStorage.removeItem("pathwayai_prelim_ss");
+    } catch (e2) {}
+  }
+  function readLastResumeInfo() {
+    var uid = getInsforgeUserIdForResume();
+    if (!uid) return null;
+    try {
+      var r = localStorage.getItem(_lastResumeInfoKey(uid));
+      if (!r) return null;
+      return JSON.parse(r);
+    } catch (e) {
+      return null;
+    }
+  }
+  function writeLastResumeInfo(meta, parsed) {
+    var uid = getInsforgeUserIdForResume();
+    if (!uid) return;
+    if (!meta || !meta.storageKey) return;
+    var disp = (parsed && (parsed.name || parsed.displayName)) || meta.displayName || "there";
+    if (state && state.displayName && !parsed) disp = state.displayName;
+    try {
+      var out = {
+        fileName: meta.filename || "resume.pdf",
+        displayName: String(disp).split(/\s+/).slice(0, 3).join(" ") || "there",
+        storageKey: meta.storageKey,
+        publicUrl: meta.fileUrl || meta.publicUrl || ""
+      };
+      localStorage.setItem(_lastResumeInfoKey(uid), JSON.stringify(out));
+    } catch (e) {}
+  }
+  function getActiveResumeParsed() {
+    if (state && state._resumePendingChooser) return null;
+    if (state && state.resumeParsed && typeof state.resumeParsed === "object") {
+      return state.resumeParsed;
+    }
+    return readScopedResumeParsed();
+  }
+  function rehydrateResumeStateFromStorage() {
+    try {
+      tryRemoveLegacyResumeRead();
+    } catch (e) {}
+    try {
+      tryRemoveLegacyLinkedinBundle();
+    } catch (e) {}
+    var chMuted = null;
+    try { chMuted = sessionStorage.getItem(RESUME_CHOOSER_MUTED_SS); } catch (e) {}
+    var uid = getInsforgeUserIdForResume();
+    var last = uid ? readLastResumeInfo() : null;
+    if (uid && last && !chMuted) {
+      state._resumePendingChooser = true;
+      state.resumeParsed = null;
+      try { state._resumeFileLabel = null; } catch (e2) {}
+      return;
+    }
+    state._resumePendingChooser = false;
+    var rp = readScopedResumeParsed();
+    if (rp && typeof rp === "object") {
+      state.resumeParsed = rp;
+    } else {
+      state.resumeParsed = null;
+    }
+  }
+  function migrateGuestResumeToScopedUser(uid) {
+    if (!uid || !String(uid).trim()) return;
+    var guest = null;
+    try { guest = sessionStorage.getItem(RESUME_GUEST_DATA_SS); } catch (e) {}
+    if (guest) {
+      try { localStorage.setItem(_resumeParsedKey(uid), guest); } catch (e2) {}
+      try { sessionStorage.removeItem(RESUME_GUEST_DATA_SS); } catch (e3) {}
+    }
+    var gli = null;
+    try { gli = sessionStorage.getItem(RESUME_LINKEDIN_GUEST_SS); } catch (e4) {}
+    if (gli) {
+      try { localStorage.setItem(_linkedinBundleKey(uid), gli); } catch (e5) {}
+      try { sessionStorage.removeItem(RESUME_LINKEDIN_GUEST_SS); } catch (e6) {}
+    }
+  }
+  function tryRemoveLegacyResumeRead() {
+    try {
+      if (localStorage.getItem(LEGACY_RESUME_KEY)) localStorage.removeItem(LEGACY_RESUME_KEY);
+    } catch (e) {}
+  }
+  function savePrelimScoresToScoped(snapshot) {
+    if (!snapshot) return;
+    var uid = getInsforgeUserIdForResume();
+    try {
+      if (uid) {
+        localStorage.setItem(_prelimKey(uid), JSON.stringify(snapshot));
+      } else {
+        sessionStorage.setItem("pathwayai_prelim_ss", JSON.stringify(snapshot));
+      }
+    } catch (e) {}
+  }
+  function readPrelimScoresFromScoped() {
+    var uid = getInsforgeUserIdForResume();
+    try {
+      if (uid) {
+        var g = localStorage.getItem(_prelimKey(uid));
+        if (g) return JSON.parse(g);
+      }
+      var s = sessionStorage.getItem("pathwayai_prelim_ss");
+      if (s) return JSON.parse(s);
+    } catch (e) {}
+    try {
+      return JSON.parse(localStorage.getItem("pathwayai_prelimScores") || "null");
+    } catch (e2) {
+      return null;
+    }
+  }
+  function resetScreen4ResumeUi() {
+    var drop = document.getElementById("resume-drop");
+    if (drop) {
+      drop.textContent = "Drop your PDF here or click to browse";
+    }
+    var ui = document.getElementById("resume-parse-ui");
+    if (ui) ui.style.display = "none";
+    var st = document.getElementById("resume-parse-status");
+    if (st) st.textContent = "Reading your resume…";
+    var sp = document.getElementById("resume-parse-spinner");
+    if (sp) {
+      sp.style.display = "block";
+      sp.style.borderColor = "";
+      sp.style.borderTopColor = "";
+    }
+    var rsc = document.getElementById("resume-session-chooser");
+    if (rsc) {
+      rsc.style.display = "none";
+      rsc.setAttribute("aria-hidden", "true");
+    }
+    var rf = document.getElementById("resume-file");
+    if (rf) rf.value = "";
+  }
+  function syncScreen4ResumePanel() {
+    var rsc = document.getElementById("resume-session-chooser");
+    var rline = document.getElementById("resume-session-chooser-line");
+    var chMuted = null;
+    try { chMuted = sessionStorage.getItem(RESUME_CHOOSER_MUTED_SS); } catch (e) {}
+    var uid = getInsforgeUserIdForResume();
+    var last = readLastResumeInfo();
+    if (uid && last && !chMuted) {
+      state._resumePendingChooser = true;
+      state.resumeParsed = null;
+      try { delete state._resumeFileLabel; } catch (e) {}
+      resetScreen4ResumeUi();
+      if (rsc) {
+        rsc.style.display = "block";
+        rsc.setAttribute("aria-hidden", "false");
+      }
+      if (rline) {
+        rline.textContent = (last.displayName || "Your profile") + " — Resume from last session";
+      }
+      return;
+    }
+    if (rsc) {
+      rsc.style.display = "none";
+      rsc.setAttribute("aria-hidden", "true");
+    }
+    state._resumePendingChooser = false;
+    var rp = state.resumeParsed;
+    if (rp) {
+      var hasPayload = (rp.rawText && String(rp.rawText).trim().length) ||
+        (rp.skills && rp.skills.length) ||
+        (rp.experience && rp.experience.length) ||
+        (rp.education && rp.education.length) ||
+        (rp.experienceDisplay && rp.experienceDisplay.length) ||
+        (rp.educationDisplay && rp.educationDisplay.length) ||
+        (rp.educationChips && rp.educationChips.length) ||
+        (rp.experienceChips && rp.experienceChips.length) ||
+        (rp.projectChips && rp.projectChips.length) ||
+        (rp.certificationChips && rp.certificationChips.length) ||
+        (rp.name && String(rp.name).trim()) ||
+        (rp.displayName && String(rp.displayName).trim()) ||
+        rp.linkedInExport;
+      if (hasPayload || (state._resumeFileLabel && typeof rp === "object")) {
+      var drop2 = document.getElementById("resume-drop");
+      if (drop2) {
+        if (state._resumeFileLabel) {
+          drop2.textContent = "Selected: " + state._resumeFileLabel;
+        } else {
+          drop2.textContent = "Selected: resume";
+        }
+      }
+      var ui2 = document.getElementById("resume-parse-ui");
+      if (ui2) ui2.style.display = "flex";
+      var st2 = document.getElementById("resume-parse-status");
+      if (st2) st2.textContent = "Resume parsed successfully";
+      var sp2 = document.getElementById("resume-parse-spinner");
+      if (sp2) {
+        sp2.style.display = "block";
+        sp2.style.borderColor = "rgba(34,197,94,0.35)";
+        sp2.style.borderTopColor = "#22c55e";
+      }
+      return;
+    }
+    }
+    resetScreen4ResumeUi();
+  }
 
   function loadAppState() {
     try {
@@ -2624,8 +2972,35 @@
 
   function saveAppState(partial) {
     try {
+      var p = Object.assign({}, partial || {});
+      if (Object.prototype.hasOwnProperty.call(p, "resumeParsed") && p.resumeParsed === null) {
+        var uid0 = getInsforgeUserIdForResume();
+        if (uid0) {
+          try { localStorage.removeItem(_resumeParsedKey(uid0)); } catch (e) {}
+        } else {
+          try { sessionStorage.removeItem(RESUME_GUEST_DATA_SS); } catch (e) {}
+        }
+        delete p.resumeParsed;
+      }
+      if (p.resumeParsed != null) {
+        writeScopedResumeParsed(p.resumeParsed, {});
+        if (p.resumeMeta && p.resumeMeta.storageKey) {
+          writeLastResumeInfo(p.resumeMeta, p.resumeParsed);
+        } else if (p.resumeMeta && p.resumeMeta.filename) {
+          writeLastResumeInfo({ filename: p.resumeMeta.filename, storageKey: p.resumeMeta.storageKey || p.resumeMeta.key }, p.resumeParsed);
+        }
+        delete p.resumeParsed;
+        delete p.resumeMeta;
+      }
+      if (p.resumeMeta !== void 0) {
+        delete p.resumeMeta;
+      }
       const cur = loadAppState() || {};
-      const next = Object.assign({}, cur, partial || {});
+      delete cur.resumeParsed;
+      delete cur.resumeMeta;
+      const next = Object.assign({}, cur, p);
+      delete next.resumeParsed;
+      delete next.resumeMeta;
       localStorage.setItem(APP_STATE_KEY, JSON.stringify(next));
     } catch (err) {}
   }
@@ -2712,17 +3087,10 @@ function clearAllAppStorage() {
     }
     if (typeof s.industry === "string") state.industry = s.industry;
     if (Array.isArray(s.industries)) state.industries = s.industries.slice();
-    if (Array.isArray(s.dreamCompanies)) state.dreamCompanies = s.dreamCompanies.slice();
+    if (Array.isArray(s.dreamCompanies)) state.dreamCompanies = s.dreamCompanies.slice(0, 5);
     if (typeof s.timeline === "string") state.timeline = s.timeline;
 
-    if (s.resumeMeta && typeof s.resumeMeta === "object") {
-      const drop = document.getElementById("resume-drop");
-      if (drop && s.resumeMeta.filename) drop.textContent = "Selected: " + s.resumeMeta.filename;
-    }
-
-    if (s.resumeParsed && typeof s.resumeParsed === "object") {
-      state.resumeParsed = s.resumeParsed;
-    }
+    rehydrateResumeStateFromStorage();
 
     if (typeof s.profileMode === "string") state.profileMode = s.profileMode;
 
@@ -2818,6 +3186,7 @@ function assessmentMatchesSession(c) {
 
     if (id === "screen-2") syncGoalFormFromState();
     if (id === "screen-3") startScanSequence();
+    if (id === "screen-4") syncScreen4ResumePanel();
     if (id === "screen-4-ready") renderProfileReady();
     if (id === "screen-5") beginAssessmentSession();
     if (id === "screen-6") renderDashboard();
@@ -2930,7 +3299,9 @@ function assessmentMatchesSession(c) {
           var u = data && data.user;
           var em = (u && u.email) || email;
           var disp = (u && u.profile && u.profile.name) || name;
+          if (u && u.id) setInsforgeUserIdForResume(String(u.id));
           setAuthedUser(em, disp, "password");
+          rehydrateResumeStateFromStorage();
           goToGoalsAfterAuth();
         })
         .catch(function (e) {
@@ -2961,7 +3332,9 @@ function assessmentMatchesSession(c) {
           var disp = (u && u.profile && u.profile.name) || "";
           if (!disp) setDisplayNameFromEmail(em);
           else state.displayName = disp;
+          if (u && u.id) setInsforgeUserIdForResume(String(u.id));
           setAuthedUser(em, state.displayName, "password");
+          rehydrateResumeStateFromStorage();
           goToGoalsAfterAuth();
         })
         .catch(function (e) {
@@ -2987,7 +3360,12 @@ function assessmentMatchesSession(c) {
       localStorage.removeItem(INSFORGE_TOKEN_KEY);
     } catch (e2) {}
     clearInsforgeClientCache();
+    try {
+      clearScopedResumeStorages();
+    } catch (e) {}
     clearAllPathwayAIStorage();
+    try { tryRemoveLegacyResumeRead(); } catch (e) {}
+    try { tryRemoveLegacyLinkedinBundle(); } catch (e) {}
     // Reset in-memory state
     state.email = "";
     state.displayName = "there";
@@ -3000,8 +3378,12 @@ function assessmentMatchesSession(c) {
     state.manualSkills = [];
     state.persistedDashboard = null;
     state.assessmentAnswers = [];
+    state.resumeParsed = null;
+    state._resumePendingChooser = false;
+    state._resumeFileLabel = null;
     var so = document.getElementById('btn-signout');
     if (so) so.style.display = 'none';
+    try { resetScreen4ResumeUi(); } catch (e) {}
     showScreen("screen-1", { skipAssessmentCache: true });
   });
 
@@ -3023,6 +3405,7 @@ function assessmentMatchesSession(c) {
     return c.auth.getCurrentUser().then(function (res) {
       if (res && res.data && res.data.user) {
         var u = res.data.user;
+        if (u && u.id) setInsforgeUserIdForResume(String(u.id));
         var em = u.email || "";
         var name = (u.profile && u.profile.name) || "";
         if (em) {
@@ -3030,6 +3413,7 @@ function assessmentMatchesSession(c) {
           else state.displayName = name;
           setAuthedUser(em, state.displayName, "insforge");
         }
+        rehydrateResumeStateFromStorage();
         persistInsforgeAccessToken(c, { accessToken: null });
         return;
       }
@@ -3045,6 +3429,7 @@ function assessmentMatchesSession(c) {
         .then(function (body) {
           if (body && body.user) {
             var u = body.user;
+            if (u && u.id) setInsforgeUserIdForResume(String(u.id));
             var em = u.email || "";
             var name = (u.profile && u.profile.name) || "";
             if (em) {
@@ -3052,6 +3437,7 @@ function assessmentMatchesSession(c) {
               else state.displayName = name;
               setAuthedUser(em, state.displayName, "insforge");
             }
+            rehydrateResumeStateFromStorage();
             persistInsforgeAccessToken(c, { accessToken: t });
           } else {
             c.getHttpClient().setAuthToken(null);
@@ -3130,11 +3516,18 @@ function assessmentMatchesSession(c) {
   function syncGoalFormFromState() {
     var ri = document.getElementById("goal-role-input");
     if (ri) ri.value = state.role || "";
+    if (state.dreamCompanies && state.dreamCompanies.length > 5) {
+      state.dreamCompanies = state.dreamCompanies.slice(0, 5);
+    }
     renderIndustryPills();
     renderTimelinePills();
     renderGoalDreamTags();
-    var di = document.getElementById("goal-dream-input");
-    if (di) di.value = "";
+    var ds = document.getElementById("goal-dream-search");
+    if (ds) ds.value = "";
+    var ow = document.getElementById("goal-dream-other-wrap");
+    if (ow) ow.classList.add("hidden");
+    var oi = document.getElementById("goal-dream-other-input");
+    if (oi) oi.value = "";
   }
 
   function fillRoleDropdownFromQuery() {
@@ -3158,6 +3551,57 @@ function assessmentMatchesSession(c) {
       sugg.classList.remove("open");
       sugg.hidden = true;
     }
+  }
+
+  function closeDreamCompanyDropdown() {
+    var sugg = document.getElementById("goal-dream-suggestions");
+    if (sugg) {
+      sugg.classList.remove("open");
+      sugg.hidden = true;
+    }
+  }
+
+  function fillDreamCompanyDropdown() {
+    var inp = document.getElementById("goal-dream-search");
+    var sugg = document.getElementById("goal-dream-suggestions");
+    if (!inp || !sugg) return;
+    if (state.dreamCompanies.length >= 5) {
+      sugg.innerHTML = "";
+      sugg.classList.remove("open");
+      sugg.hidden = true;
+      return;
+    }
+    var q = inp.value.trim().toLowerCase();
+    var list = DREAM_COMPANY_CHOICES.filter(function (c) {
+      if (state.dreamCompanies.indexOf(c) !== -1) return false;
+      return !q || c.toLowerCase().indexOf(q) !== -1;
+    });
+    var showOther = !q || DREAM_OTHER_LABEL.toLowerCase().indexOf(q) !== -1;
+    var parts = list.map(function (c) {
+      return "<button type=\"button\" role=\"option\">" + escapeHtml(c) + "</button>";
+    });
+    if (showOther) {
+      parts.push("<button type=\"button\" role=\"option\" data-other=\"1\">" + escapeHtml(DREAM_OTHER_LABEL) + "</button>");
+    }
+    sugg.innerHTML = parts.join("");
+    var has = parts.length > 0;
+    sugg.classList.toggle("open", has);
+    sugg.hidden = !has;
+  }
+
+  function addDreamCompanyFromPicker(name) {
+    var v = String(name || "").trim();
+    if (!v || v === DREAM_OTHER_LABEL) return;
+    if (state.dreamCompanies.length >= 5) return;
+    if (state.dreamCompanies.indexOf(v) !== -1) return;
+    state.dreamCompanies.push(v);
+    renderGoalDreamTags();
+    saveAppState({ dreamCompanies: state.dreamCompanies });
+    var ds = document.getElementById("goal-dream-search");
+    if (ds) ds.value = "";
+    closeDreamCompanyDropdown();
+    var ow = document.getElementById("goal-dream-other-wrap");
+    if (ow) ow.classList.add("hidden");
   }
 
   function setupGoalScreen() {
@@ -3249,21 +3693,44 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
       saveAppState({ timeline: state.timeline });
     });
 
-    const dreamInp = document.getElementById("goal-dream-input");
-    const dreamTags = document.getElementById("goal-dream-tags");
-    if (dreamInp) {
-      dreamInp.addEventListener("keydown", function (e) {
-        if (e.key !== "Enter") return;
-        e.preventDefault();
-        const v = dreamInp.value.trim();
-        if (v && state.dreamCompanies.indexOf(v) === -1) {
-          state.dreamCompanies.push(v);
-          dreamInp.value = "";
-          renderGoalDreamTags();
-          saveAppState({ dreamCompanies: state.dreamCompanies });
+    const dreamWrap = document.getElementById("goal-dream-combo-wrap");
+    const dreamSearch = document.getElementById("goal-dream-search");
+    const dreamSugg = document.getElementById("goal-dream-suggestions");
+    if (dreamSearch && dreamSugg) {
+      dreamSearch.addEventListener("focus", function () { fillDreamCompanyDropdown(); });
+      dreamSearch.addEventListener("click", function () { fillDreamCompanyDropdown(); });
+      dreamSearch.addEventListener("input", function () { fillDreamCompanyDropdown(); });
+      dreamSugg.addEventListener("click", function (e) {
+        const b = e.target.closest("button");
+        if (!b) return;
+        if (b.getAttribute("data-other") === "1") {
+          const ow = document.getElementById("goal-dream-other-wrap");
+          if (ow) ow.classList.remove("hidden");
+          const oi = document.getElementById("goal-dream-other-input");
+          if (oi) oi.focus();
+          closeDreamCompanyDropdown();
+          if (dreamSearch) dreamSearch.value = "";
+          return;
         }
+        addDreamCompanyFromPicker(b.textContent);
+      });
+      document.addEventListener("click", function (e) {
+        if (dreamWrap && !dreamWrap.contains(e.target)) closeDreamCompanyDropdown();
       });
     }
+    var otherDreamInp = document.getElementById("goal-dream-other-input");
+    if (otherDreamInp) {
+      otherDreamInp.addEventListener("keydown", function (e) {
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        var v = otherDreamInp.value.trim();
+        if (v) addDreamCompanyFromPicker(v);
+        otherDreamInp.value = "";
+        const ow2 = document.getElementById("goal-dream-other-wrap");
+        if (ow2) ow2.classList.add("hidden");
+      });
+    }
+    const dreamTags = document.getElementById("goal-dream-tags");
     if (dreamTags) {
       dreamTags.addEventListener("click", function (e) {
         const btn = e.target.closest("button[data-i]");
@@ -3359,31 +3826,10 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
     return t.slice(0, maxLen - 1) + "…";
   }
 
-  function formatProjectSummaryEntries(parsed) {
-    var proj = parsed && parsed.projects;
-    if (!proj || !proj.length) return [];
-    return proj.slice(0, 2).map(function (p) {
-      var line = String(p).trim();
-      if (!line) return "";
-      var segments = line.split(",");
-      var firstTech = segments.length > 1 ? segments[segments.length - 1].trim() : "";
-      var techWord = firstTech.split(/\s+/)[0] || "";
-      if (techWord) techWord = normalizeSkillDisplay(techWord.toLowerCase());
-      var namePart = line.split(/[,|·–\-]/)[0].trim();
-      namePart = clampSummaryLine(namePart, 52);
-      if (techWord) return namePart + " · " + techWord;
-      return clampSummaryLine(line, 88);
-    }).filter(Boolean);
-  }
-
   function getResumeOnlySkillSnapshot() {
-    var s = loadAppState() || {};
-    var parsed = s.resumeParsed || state.resumeParsed;
-    if (!parsed) {
-      try {
-        var rd = localStorage.getItem("pathwayai_resumeData");
-        if (rd) parsed = JSON.parse(rd);
-      } catch (e) {}
+    var parsed = null;
+    if (!state._resumePendingChooser) {
+      parsed = getActiveResumeParsed();
     }
     var skills = [];
     if (parsed && parsed.skills) skills = parsed.skills.map(function (x) { return String(x).toLowerCase(); });
@@ -3410,14 +3856,7 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
 
   function renderProfileReady() {
     var s = loadAppState() || {};
-    var parsed = s.resumeParsed || state.resumeParsed;
-    // Also allow the explicit resumeData key
-    try {
-      if (!parsed) {
-        var raw = localStorage.getItem("pathwayai_resumeData");
-        if (raw) parsed = JSON.parse(raw);
-      }
-    } catch (err) {}
+    var parsed = state._resumePendingChooser ? null : getActiveResumeParsed();
 
     var name = (s.manual && s.manual.name) || state.displayName || "there";
     var role = state.role || s.role || "your role";
@@ -3428,7 +3867,7 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
     else if (isLIEx) badge = "LinkedIn Export";
 
     try {
-      localStorage.setItem("pathwayai_prelimScores", JSON.stringify(getResumeOnlySkillSnapshot()));
+      savePrelimScoresToScoped(getResumeOnlySkillSnapshot());
     } catch (err) {}
 
     var summary = document.getElementById("profile-ready-summary");
@@ -3454,14 +3893,24 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
         expLines = parsed.experienceDisplay.slice(0, expMax).map(function (x) { return clampSummaryLine(String(x), 96); });
       }
 
-      var projLines = formatProjectSummaryEntries(parsed);
-
       function cellLines(lines, emptyLabel) {
         if (!lines || !lines.length) return "<div class=\"pr-muted\">" + emptyLabel + "</div>";
         return lines.map(function (line) {
           return "<div class=\"pr-line\">" + escapeHtml(line) + "</div>";
         }).join("");
       }
+      var prLabelChipsLine = function (label, chips) {
+        if (!chips || !chips.length) {
+          return "<div class=\"pr-chips-line\" style=\"display:flex;flex-wrap:wrap;align-items:baseline;gap:0.3rem 0.35rem;margin:0.1rem 0 0.45rem;\">" +
+            "<span style=\"font-weight:600;\">" + escapeHtml(label) + ":</span> " +
+            "<span class=\"pr-muted\">—</span></div>";
+        }
+        return "<div class=\"pr-chips-line\" style=\"display:flex;flex-wrap:wrap;align-items:baseline;gap:0.3rem 0.35rem;margin:0.1rem 0 0.45rem;\">" +
+          "<span style=\"font-weight:600;\">" + escapeHtml(label) + ":</span> " +
+          chips.map(function (c) {
+            return "<span class=\"skill-pill-mini\">" + escapeHtml(clampSummaryLine(String(c), 72)) + "</span>";
+          }).join(" ") + "</div>";
+      };
 
       var badgeHtml = isLIEx
         ? "<span class=\"pr-badge-li-export\">" + escapeHtml(badge) + "</span>"
@@ -3530,11 +3979,25 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
             return normalizeSkillDisplay(String(x).toLowerCase());
           });
         }
-        var skillsHtml = skillList.length
-          ? skillList.map(function (t) {
-            return "<span class=\"skill-pill-mini\">" + escapeHtml(t) + "</span>";
-          }).join("")
-          : "<span class=\"pr-muted\">No skills yet</span>";
+        var skillChipsR = (parsed && parsed.skillChips && parsed.skillChips.length) ? parsed.skillChips : skillList;
+        var eduChipsR = (parsed && parsed.educationChips && parsed.educationChips.length)
+          ? parsed.educationChips
+          : uniqueChipsForDisplay(
+            educationDisplayToChips((parsed && parsed.educationDisplay) || (parsed && parsed.education) || []),
+            20
+          );
+        var expChipsR = (parsed && parsed.experienceChips && parsed.experienceChips.length)
+          ? parsed.experienceChips
+          : uniqueChipsForDisplay(
+            experienceDisplayToChips((parsed && parsed.experienceDisplay) || (parsed && parsed.experience) || []),
+            24
+          );
+        var projChipsR = (parsed && parsed.projectChips && parsed.projectChips.length)
+          ? parsed.projectChips
+          : uniqueChipsForDisplay(projectLinesToChips((parsed && parsed.projects) || [], ""), 28);
+        var certChipsR = (parsed && parsed.certificationChips && parsed.certificationChips.length)
+          ? parsed.certificationChips
+          : uniqueChipsForDisplay(certLinesToChips((parsed && parsed.certifications) || []), 16);
 
         summary.innerHTML =
           "<div class=\"pr-top\">" +
@@ -3543,10 +4006,10 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
           "<div class=\"pr-meta\">" + badgeHtml + " · Target: " + escapeHtml(String(role)) + "</div>" +
           "</div>" +
           "<div class=\"pr-grid\">" +
-          "<div class=\"pr-cell\"><h4>Education</h4>" + cellLines(eduLines, "Not detected") + "</div>" +
-          "<div class=\"pr-cell\"><h4>Experience</h4>" + cellLines(expLines, "Not detected") + "</div>" +
-          "<div class=\"pr-cell\"><h4>Projects</h4>" + cellLines(projLines, "None listed") + "</div>" +
-          "<div class=\"pr-cell\"><h4>Skills</h4><div style=\"display:flex;flex-wrap:wrap;gap:0.35rem;\">" + skillsHtml + "</div></div>" +
+          "<div class=\"pr-cell\">" + prLabelChipsLine("Education", eduChipsR) + "</div>" +
+          "<div class=\"pr-cell\">" + prLabelChipsLine("Experience", expChipsR) + "</div>" +
+          "<div class=\"pr-cell\">" + prLabelChipsLine("Projects", projChipsR) + prLabelChipsLine("Certifications", certChipsR) + "</div>" +
+          "<div class=\"pr-cell\">" + prLabelChipsLine("Skills", skillChipsR) + "</div>" +
           "</div>";
       }
     }
@@ -3735,44 +4198,115 @@ function startScanSequence() {
     return out;
   }
 
+  var _pdfjsModuleLoad = null;
+  function getPdfjsModule() {
+    if (window.__pdfjsModule) return Promise.resolve(window.__pdfjsModule);
+    if (_pdfjsModuleLoad) return _pdfjsModuleLoad;
+    _pdfjsModuleLoad = (function () {
+      try {
+        var base = (document.getElementsByTagName("base")[0] && document.getElementsByTagName("base")[0].href) || window.location.href;
+        return import(new URL("vendor/pdf.min.mjs", base).href).then(function (m) {
+          try {
+            if (m && m.GlobalWorkerOptions) {
+              m.GlobalWorkerOptions.workerSrc = new URL("vendor/pdf.worker.min.mjs", base).href;
+            }
+          } catch (e) {}
+          window.__pdfjsModule = m;
+          return m;
+        });
+      } catch (e) {
+        return Promise.reject(e);
+      }
+    })();
+    return _pdfjsModuleLoad;
+  }
+
   async function extractPdfText(file) {
     if (!file) return "";
-    if (typeof pdfjsLib === "undefined") return "";
+    var pdf = null;
     try {
-      pdfjsLib.GlobalWorkerOptions.workerSrc =
-        window.__pdfjsWorkerSrc || pdfjsLib.GlobalWorkerOptions.workerSrc;
-    } catch (err) {}
-
+      pdf = await getPdfjsModule();
+    } catch (err) {
+      return "";
+    }
+    if (!pdf || !pdf.getDocument) return "";
     const buf = await file.arrayBuffer();
-    const doc = await pdfjsLib.getDocument({ data: buf }).promise;
-    let full = "";
-    for (let i = 1; i <= doc.numPages; i++) {
-      const page = await doc.getPage(i);
+    const doc = await pdf.getDocument({ data: buf }).promise;
+    var full = "";
+    for (var p = 1; p <= doc.numPages; p++) {
+      const page = await doc.getPage(p);
       const content = await page.getTextContent();
       full += "\n" + content.items.map(function (it) { return it.str; }).join(" ");
     }
     return full;
   }
 
+  var RESUME_HEADER_START_RE = /^\s*(academic background|educational background|work history|work experience|professional experience|personal projects|academic projects|technical skills|core competencies|internship|employment|experience|education|projects?|project|skills?|certifications?|awards?|publications?|summary|objective|profile|references?)(\s*[:#\-._]|\b\s+)/i;
+  function isResumeSectionHeaderLine(l) {
+    if (!l || l.length > 80) return false;
+    var t = l.replace(/^[\d\.\s)]+/, "").trim();
+    if (t.length < 2) return false;
+    if (RESUME_HEADER_START_RE.test(t)) return true;
+    if (/^projects?\b/i.test(t) && t.length < 40) return true;
+    if (/^experience\b/i.test(t) && t.length < 32) return true;
+    if (/^education\b/i.test(t) && t.length < 40) return true;
+    if (/^skills?(\s+and|\s+&|\/)\s*tools?/i.test(t) && t.length < 72) return true;
+    if (/^certification/i.test(t) && t.length < 48) return true;
+    return false;
+  }
+
+  function escapeRegEx(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function injectSectionNewlines(flatText) {
+    var t = String(flatText || "");
+    if (!t) return t;
+    var H = [
+      "Academic Background", "Academic Projects", "Personal Projects", "Educational Background", "Work History", "Work Experience",
+      "Professional Experience", "Core Competencies", "Technical Skills", "Employment", "Internship", "Experience", "Education", "Employment",
+      "Projects", "Project", "Skills", "Certifications", "Certification", "Certifications and Courses", "Awards", "Publications", "Summary"
+    ];
+    for (var hi = 0; hi < H.length; hi++) {
+      var hx = H[hi];
+      t = t.replace(
+        new RegExp("( |\\n|^)(" + escapeRegEx(hx) + ")(?=(?:\\s*[:#\\-._]*(?:\\s+|$))|\\b)", "gi"),
+        function (a, s, header) { return s + "\n" + header; }
+      );
+    }
+    t = t.replace(/(\n[ \t]*)+/g, "\n");
+    t = t.replace(/ +/g, " ");
+    return t.trim();
+  }
+
   function sliceSection(lines, startIdx, maxLines) {
     const out = [];
-    for (let i = startIdx + 1; i < lines.length && out.length < maxLines; i++) {
+    for (var i = startIdx + 1; i < lines.length && out.length < maxLines; i++) {
       const l = lines[i].trim();
       if (!l) continue;
-      if (/^(education|skills|experience|work experience|projects|certifications|courses|achievements)$/i.test(l)) break;
+      if (isResumeSectionHeaderLine(l)) break;
       out.push(l);
     }
     return out;
   }
 
   function findSectionIndex(lines, names) {
-    const set = (names || []).map(function (x) { return String(x).toLowerCase(); });
-    for (let i = 0; i < lines.length; i++) {
-      const ll = lines[i].toLowerCase().trim();
-      if (set.indexOf(ll) !== -1) return i;
-      // allow "Skills:" style
-      for (let j = 0; j < set.length; j++) {
-        if (ll === (set[j] + ":")) return i;
+    if (!lines || !lines.length) return -1;
+    var nlow = (names || []).map(function (x) { return String(x).toLowerCase().replace(/[:\s]+$/g, ""); });
+    for (var i = 0; i < lines.length; i++) {
+      var t = lines[i].replace(/^[\d\.\s)]+/, "").replace(/[·•]/g, " ").trim();
+      if (!t) continue;
+      var lo = t.toLowerCase();
+      for (var j = 0; j < nlow.length; j++) {
+        var n = nlow[j];
+        if (!n) continue;
+        if (lo === n) return i;
+        if (lo === n + ":") return i;
+        if (t.length < n.length + 24) {
+          var re = new RegExp("^" + escapeRegEx(n) + "\\b\\s*[:#\\-._]*$", "i");
+          if (re.test(t)) return i;
+        }
+        if (t.length < 40 && lo.indexOf(n) === 0) return i;
       }
     }
     return -1;
@@ -3877,19 +4411,81 @@ function startScanSequence() {
   }
 
   function buildExperienceDisplay(lines) {
-    var expIdx = findSectionIndex(lines, ["experience", "work experience", "employment", "professional experience", "internship"]);
-    var sec = expIdx !== -1 ? sliceSection(lines, expIdx, 45) : [];
+    var expIdx = findSectionIndex(lines, [
+      "experience", "work experience", "work history", "employment", "professional experience", "internship"
+    ]);
+    var sec = expIdx !== -1 ? sliceSection(lines, expIdx, 50) : [];
     var out = [];
-    for (var i = 0; i < sec.length && out.length < 2; i++) {
+    for (var i = 0; i < sec.length && out.length < 6; i++) {
       var formatted = formatOneExperienceLine(sec[i]);
       if (formatted) out.push(formatted);
     }
     return out;
   }
 
+  function uniqueChipsForDisplay(arr, cap) {
+    var seen = {};
+    var o = [];
+    (arr || []).forEach(function (c) {
+      c = String(c || "").replace(/\s+/g, " ").trim();
+      if (c.length < 2 || c.length > 80) return;
+      var k = c.toLowerCase();
+      if (seen[k]) return;
+      seen[k] = true;
+      o.push(c);
+    });
+    return o.slice(0, cap || 32);
+  }
+  function educationDisplayToChips(eduDisplay) {
+    var o = [];
+    (eduDisplay || []).forEach(function (line) {
+      String(line).split(/·|\/|–|—|\|/g).forEach(function (p) {
+        p = p.replace(/\s+/g, " ").replace(/^[-–,]\s*/, "").trim();
+        if (p.length > 1 && p.length < 100) o.push(p);
+      });
+    });
+    return o;
+  }
+  function experienceDisplayToChips(expDisplay) {
+    var o = [];
+    (expDisplay || []).forEach(function (line) {
+      String(line).split("·").forEach(function (p) {
+        p = p.replace(/\s+/g, " ").replace(/^[-–,]\s*/, "").trim();
+        if (p.length > 1 && p.length < 100) o.push(p);
+      });
+    });
+    return o;
+  }
+  function projectLinesToChips(projectArr, _fullLower) {
+    var o = [];
+    (projectArr || []).forEach(function (line) {
+      line = String(line).replace(/^[\u2022\-\*•\s]+/, "").trim();
+      if (line.length < 2) return;
+      var segs = line.split(/[—|]/);
+      var head = (segs[0] || "").trim();
+      if (head.length > 1 && head.length < 80) o.push(head);
+      var lline = line.toLowerCase();
+      RESUME_SKILL_LEXICON.forEach(function (sk) {
+        if (lline.indexOf(sk) !== -1) o.push(normalizeSkillDisplay(sk));
+      });
+    });
+    return o;
+  }
+  function certLinesToChips(certArr) {
+    var o = [];
+    (certArr || []).forEach(function (line) {
+      String(line).split(/[;,]/g).forEach(function (c) {
+        c = c.replace(/^\s*[\-•*]\s*/, "").trim();
+        if (c.length > 1 && c.length < 100) o.push(c);
+      });
+    });
+    return o;
+  }
+
   function parseResumeHeuristics(text) {
     const raw = String(text || "");
-    const lines = raw.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+    const withNl = injectSectionNewlines(raw);
+    const lines = withNl.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
     const flat = raw.replace(/\s+/g, " ").trim();
     const lower = flat.toLowerCase();
 
@@ -3919,25 +4515,36 @@ function startScanSequence() {
     const experienceForStore = experienceDisplay.length ? experienceDisplay : null;
 
     // Skills: section header first; otherwise lexicon scan
-    let skillItems = [];
-    const skillsIdx = findSectionIndex(lines, ["skills", "technical skills"]);
+    var skillItems = [];
+    const skillsIdx = findSectionIndex(lines, ["skills", "technical skills", "core competencies"]);
     if (skillsIdx !== -1) {
-      const sec = sliceSection(lines, skillsIdx, 10).join(" ");
+      const sec = sliceSection(lines, skillsIdx, 20).join(" ");
       skillItems = sec.split(/•|\u2022|\||,|;|\n/).map(function (x) { return x.trim(); }).filter(Boolean);
     }
-    // keyword scan (adds if not present)
     const detected = [];
     RESUME_SKILL_LEXICON.forEach(function (sk) {
       if (lower.indexOf(sk) !== -1) detected.push(sk);
     });
     const skills = uniqueLower(skillItems.concat(detected)).slice(0, 40);
 
-    // Projects / certs sections (raw bullets ok — not shown in profile-ready summary card)
-    const projIdx = findSectionIndex(lines, ["projects", "project"]);
-    const certIdx = findSectionIndex(lines, ["certifications", "courses", "achievements"]);
+    const projIdx = findSectionIndex(lines, [
+      "projects", "personal projects", "academic projects", "relevant projects", "project", "key projects", "notable projects"
+    ]);
+    const certIdx = findSectionIndex(lines, [
+      "certifications", "certification", "licenses", "licenses and certifications", "certificates", "professional certifications"
+    ]);
 
-    const projects = projIdx !== -1 ? sliceSection(lines, projIdx, 12) : [];
-    const certifications = certIdx !== -1 ? sliceSection(lines, certIdx, 10) : [];
+    const projects = projIdx !== -1 ? sliceSection(lines, projIdx, 20) : [];
+    const certifications = certIdx !== -1 ? sliceSection(lines, certIdx, 12) : [];
+
+    var educationChips = uniqueChipsForDisplay(educationDisplayToChips(educationDisplay), 20);
+    var experienceChips = uniqueChipsForDisplay(experienceDisplayToChips(experienceDisplay), 24);
+    var projectChips = uniqueChipsForDisplay(projectLinesToChips(projects, lower), 28);
+    var certificationChips = uniqueChipsForDisplay(certLinesToChips(certifications), 16);
+    var skillChips = uniqueChipsForDisplay(
+      (skills || []).map(function (x) { return normalizeSkillDisplay(String(x).toLowerCase()); }),
+      20
+    );
 
     return {
       name: displayName || name || null,
@@ -3951,6 +4558,11 @@ function startScanSequence() {
       experienceDisplay: experienceDisplay,
       projects: projects.length ? projects : null,
       certifications: certifications.length ? certifications : null,
+      educationChips: educationChips.length ? educationChips : null,
+      experienceChips: experienceChips.length ? experienceChips : null,
+      projectChips: projectChips.length ? projectChips : null,
+      certificationChips: certificationChips.length ? certificationChips : null,
+      skillChips: skillChips.length ? skillChips : null,
       rawText: flat.slice(0, 12000)
     };
   }
@@ -3967,8 +4579,11 @@ function startScanSequence() {
   resumeDrop.addEventListener("click", function () { resumeFile.click(); });
   resumeFile.addEventListener("change", function () {
     if (resumeFile.files && resumeFile.files[0]) {
-      resumeDrop.textContent = "Selected: " + resumeFile.files[0].name;
-      saveAppState({ resumeMeta: { filename: resumeFile.files[0].name } });
+      var f0 = resumeFile.files[0];
+      resumeDrop.textContent = "Selected: " + f0.name;
+      state._resumeFileLabel = f0.name;
+      state._resumePendingChooser = false;
+      try { sessionStorage.setItem(RESUME_CHOOSER_MUTED_SS, "1"); } catch (e) {}
 
       // Parse PDF (best-effort) for skill gap analysis
       (async function () {
@@ -3977,7 +4592,6 @@ function startScanSequence() {
         if (ui) ui.style.display = "flex";
         if (status) status.textContent = "Reading your resume…";
 
-        var f0 = resumeFile.files[0];
         var st = null;
         try { st = await uploadResumeFileToInsforgeStorage(f0); } catch (e) {}
         var parsed = await parsePdfResume(f0);
@@ -3985,17 +4599,15 @@ function startScanSequence() {
           if (parsed.rawText) {
             try { parsed = await tryEnrichParseWithInsforgeServer(parsed.rawText, parsed); } catch (e) {}
           }
+          try { parsed._sourceFileName = f0.name; } catch (e) {}
           var rmeta = { filename: f0.name };
           if (st && st.key) {
             rmeta.storageKey = st.key;
             if (st.publicUrl) rmeta.fileUrl = st.publicUrl;
           }
-          // Persist as requested
-          try { localStorage.setItem("pathwayai_resumeData", JSON.stringify(parsed)); } catch (err) {}
+          state.resumeParsed = parsed;
           saveAppState({ resumeParsed: parsed, resumeMeta: rmeta });
-          try {
-            localStorage.setItem("pathwayai_prelimScores", JSON.stringify(getResumeOnlySkillSnapshot()));
-          } catch (err) {}
+          try { savePrelimScoresToScoped(getResumeOnlySkillSnapshot()); } catch (err) {}
 
           if (status) status.textContent = "Resume parsed successfully";
           // swap spinner to check
@@ -4016,6 +4628,49 @@ function startScanSequence() {
       })();
     }
   });
+  var btnResumeUseLast = document.getElementById("btn-resume-use-last");
+  if (btnResumeUseLast) {
+    btnResumeUseLast.addEventListener("click", function () {
+      var p = readScopedResumeParsed();
+      if (!p || typeof p !== "object") {
+        alert("No saved resume found.");
+        return;
+      }
+      try { sessionStorage.setItem(RESUME_CHOOSER_MUTED_SS, "1"); } catch (e) {}
+      state._resumePendingChooser = false;
+      state.resumeParsed = p;
+      var li = readLastResumeInfo();
+      if (li && li.fileName) state._resumeFileLabel = li.fileName;
+      else if (p._sourceFileName) state._resumeFileLabel = p._sourceFileName;
+      else state._resumeFileLabel = null;
+      saveAppState({ resumeParsed: p });
+      syncScreen4ResumePanel();
+    });
+  }
+  var btnResumeUploadNew = document.getElementById("btn-resume-upload-new");
+  if (btnResumeUploadNew) {
+    btnResumeUploadNew.addEventListener("click", function () {
+      var uidA = getInsforgeUserIdForResume();
+      try { sessionStorage.setItem(RESUME_CHOOSER_MUTED_SS, "1"); } catch (e) {}
+      if (uidA) {
+        try { localStorage.removeItem(_resumeParsedKey(uidA)); } catch (e) {}
+        try { localStorage.removeItem(_lastResumeInfoKey(uidA)); } catch (e) {}
+      } else {
+        try { sessionStorage.removeItem(RESUME_GUEST_DATA_SS); } catch (e) {}
+      }
+      state._resumePendingChooser = false;
+      state.resumeParsed = null;
+      state._resumeFileLabel = null;
+      var rf0 = document.getElementById("resume-file");
+      if (rf0) rf0.value = "";
+      tryRemoveLegacyResumeRead();
+      try {
+        saveAppState({ resumeParsed: null });
+      } catch (e) {}
+      resetScreen4ResumeUi();
+      syncScreen4ResumePanel();
+    });
+  }
   resumeDrop.addEventListener("dragover", function (e) {
     e.preventDefault();
     resumeDrop.classList.add("dragover");
@@ -4415,18 +5070,13 @@ function startScanSequence() {
       })
       .then(function (parts) {
         var built = linkedInBuildResumeFromParts(parts);
-        try {
-          localStorage.setItem("pathwayai_linkedinData", JSON.stringify(built.linkedinBundle));
-        } catch (e) {}
-        try {
-          localStorage.setItem("pathwayai_resumeData", JSON.stringify(built.resumeCompat));
-        } catch (e) {}
+        state._resumePendingChooser = false;
+        try { sessionStorage.setItem(RESUME_CHOOSER_MUTED_SS, "1"); } catch (e) {}
+        try { writeScopedLinkedinBundle(built.linkedinBundle); } catch (e) {}
         state.resumeParsed = built.resumeCompat;
         state.displayName = (built.resumeCompat.name || "there").split(/\s+/)[0] || "there";
         saveAppState({ resumeParsed: built.resumeCompat, displayName: state.displayName, profileMode: "linkedin_export" });
-        try {
-          localStorage.setItem("pathwayai_prelimScores", JSON.stringify(getResumeOnlySkillSnapshot()));
-        } catch (e) {}
+        try { savePrelimScoresToScoped(getResumeOnlySkillSnapshot()); } catch (e) {}
         linkedInZipSetParseUi(true, "", true);
         return built;
       })
@@ -4532,17 +5182,23 @@ function startScanSequence() {
       return;
     }
     if (state.profileMode === "resume") {
-      var rf = document.getElementById("resume-file");
-      var hasStoredResume = false;
-      try {
-        var rd = localStorage.getItem("pathwayai_resumeData");
-        if (rd && String(rd).trim()) {
-          JSON.parse(rd);
-          hasStoredResume = true;
+      if (state._resumePendingChooser) {
+        var ch = document.getElementById("resume-session-chooser");
+        if (ch) {
+          ch.scrollIntoView({ behavior: "smooth", block: "center" });
         }
-      } catch (e) {
-        hasStoredResume = false;
+        alert("Choose to use your saved resume or upload a new one.");
+        return;
       }
+      var rf = document.getElementById("resume-file");
+      var parsedOk = getActiveResumeParsed() || readScopedResumeParsed();
+      var hasStoredResume = !!(parsedOk && (
+        (parsedOk.rawText && String(parsedOk.rawText).trim().length) ||
+        (parsedOk.skills && parsedOk.skills.length) ||
+        (parsedOk.experience && parsedOk.experience.length) ||
+        (parsedOk.name && String(parsedOk.name).trim()) ||
+        (parsedOk.displayName && String(parsedOk.displayName).trim())
+      ));
       if ((!rf || !rf.files || !rf.files.length) && !hasStoredResume) {
         alert("Please upload a PDF resume first.");
         document.getElementById("resume-drop").scrollIntoView({ behavior: "smooth", block: "center" });
@@ -4552,15 +5208,7 @@ function startScanSequence() {
       return;
     }
     if (state.profileMode === "linkedin_export") {
-      var liOk = false;
-      try {
-        var rdLi = localStorage.getItem("pathwayai_resumeData");
-        if (rdLi) {
-          var oLi = JSON.parse(rdLi);
-          if (oLi && oLi.linkedInExport) liOk = true;
-        }
-      } catch (e) {}
-      if (!liOk && state.resumeParsed && state.resumeParsed.linkedInExport) liOk = true;
+      var liOk = !!(state.resumeParsed && state.resumeParsed.linkedInExport) || !!readScopedLinkedinBundle();
       if (!liOk) {
         alert("Please upload your LinkedIn data export ZIP.");
         var zdrop = document.getElementById("linkedin-zip-drop");
@@ -4582,7 +5230,7 @@ function startScanSequence() {
 
   function pathwayaiSkipToDashboard() {
     try {
-      localStorage.setItem("pathwayai_prelimScores", JSON.stringify(getResumeOnlySkillSnapshot()));
+      savePrelimScoresToScoped(getResumeOnlySkillSnapshot());
     } catch (e) {}
     try { localStorage.setItem("pathwayai_skipAssessment", "true"); } catch (e) {}
     saveAppState({ skippedAssessment: true });
@@ -4797,14 +5445,8 @@ function startScanSequence() {
   }
 
   function getResumeTextForGapApi() {
-    var s = loadAppState() || {};
-    var p = s.resumeParsed || state.resumeParsed;
-    if (!p) {
-      try {
-        var rd = localStorage.getItem("pathwayai_resumeData");
-        if (rd) p = JSON.parse(rd);
-      } catch (e) {}
-    }
+    if (state._resumePendingChooser) return "";
+    var p = getActiveResumeParsed();
     if (!p) return "";
     if (p.rawText && String(p.rawText).trim()) return String(p.rawText).slice(0, 50000);
     var parts = [];
@@ -4831,7 +5473,9 @@ function startScanSequence() {
 
   function applyGapReportToPayload(payload, result) {
     if (!payload || !result) return;
-    var rawFs = result.finalScore != null ? Number(result.finalScore) : NaN;
+    var rawFs = result.finalScore != null
+      ? Number(result.finalScore)
+      : (result.matchPercentage != null ? Number(result.matchPercentage) : NaN);
     if (!isNaN(rawFs)) {
       var fsCapped = Math.min(100, Math.max(0, Math.round(rawFs)));
       payload.readiness = fsCapped;
@@ -4865,9 +5509,16 @@ function startScanSequence() {
 
   async function fetchGapReport(payload) {
     var jobUrl = getJobUrlForGapApi();
+    var dream0 =
+      state.dreamCompanies && state.dreamCompanies.length
+        ? String(state.dreamCompanies[0] || "").trim()
+        : "";
     var apiPayload = {
       userId: getOrCreateSessionUserId(),
       jobUrl: jobUrl != null ? jobUrl : null,
+      targetRole: (state.role && String(state.role).trim()) || null,
+      industry: (state.industry && String(state.industry).trim()) || null,
+      company: dream0 || null,
       resumeText: getResumeTextForGapApi(),
       assessmentAnswers: state.assessmentAnswers || []
     };
@@ -4911,16 +5562,13 @@ function startScanSequence() {
     var skills = generateSkillScores(seed);
     var prelimMap = {};
     try {
-      var prRaw = localStorage.getItem("pathwayai_prelimScores");
-      if (prRaw) {
-        var prelim = JSON.parse(prRaw);
-        if (Array.isArray(prelim)) {
-          prelim.forEach(function (x) {
-            if (x && x.name != null) {
-              prelimMap[x.name] = typeof x.pct === "number" ? x.pct : parseFloat(x.pct) || 0;
-            }
-          });
-        }
+      var prelim = readPrelimScoresFromScoped();
+      if (Array.isArray(prelim)) {
+        prelim.forEach(function (x) {
+          if (x && x.name != null) {
+            prelimMap[x.name] = typeof x.pct === "number" ? x.pct : parseFloat(x.pct) || 0;
+          }
+        });
       }
     } catch (e) {}
 
@@ -5621,8 +6269,7 @@ function startScanSequence() {
     } else {
       var prelim = null;
       try {
-        var prRaw = localStorage.getItem("pathwayai_prelimScores");
-        if (prRaw) prelim = JSON.parse(prRaw);
+        prelim = readPrelimScoresFromScoped();
       } catch (e) {}
       if (prelim && prelim.length) {
         skills = prelim.map(function (x) {
@@ -5655,6 +6302,23 @@ function startScanSequence() {
       return { name: s.name, pct: Math.min(95, Math.round((s.pct || 0) + bonus)), detected: s.detected };
     });
     readiness = Math.round(skills.reduce(function (a, b) { return a + b.pct; }, 0) / skills.length);
+
+    var gapR = null;
+    try {
+      if (payload && payload.gapReport) gapR = payload.gapReport;
+    } catch (e) {}
+    if (!gapR) {
+      try {
+        var lsr = localStorage.getItem("pathwayai_gapReport");
+        if (lsr) gapR = JSON.parse(lsr);
+      } catch (e) {}
+    }
+    if (gapR) {
+      var gr = Number(gapR.finalScore != null ? gapR.finalScore : (gapR.matchPercentage != null ? gapR.matchPercentage : NaN));
+      if (!isNaN(gr)) {
+        readiness = Math.min(100, Math.max(0, Math.round(gr)));
+      }
+    }
 
     const bars = document.getElementById("skill-bars");
     bars.innerHTML = skills.map(function (s) {
@@ -5702,12 +6366,33 @@ function startScanSequence() {
     }).join("");
 
     document.getElementById("weekly-fill").style.width = "66%";
+
+    var ins = document.getElementById("dash-ai-insights");
+    var st = document.getElementById("dash-strength-line");
+    var gl = document.getElementById("dash-gap-line");
+    var wk = document.getElementById("dash-weekly-focus");
+    if (ins && st && gl) {
+      if (gapR && gapR.analysisSource === "openai" && (gapR.strengthSummary || gapR.gapSummary)) {
+        ins.style.display = "block";
+        st.textContent = gapR.strengthSummary || "";
+        gl.textContent = gapR.gapSummary || "";
+      } else {
+        ins.style.display = "none";
+        st.textContent = "";
+        gl.textContent = "";
+      }
+    }
+    if (wk && gapR && Array.isArray(gapR.weeklyRoadmap) && gapR.weeklyRoadmap[0] && gapR.weeklyRoadmap[0].focus) {
+      wk.textContent = String(gapR.weeklyRoadmap[0].focus);
+    } else if (wk) {
+      wk.textContent = "Complete 3 lessons this week";
+    }
   }
 
   
 
   function applyResumeBoosts(domains) {
-    var parsed = (loadAppState() || {}).resumeParsed || state.resumeParsed;
+    var parsed = getActiveResumeParsed();
     var skills = parsed && parsed.skills ? parsed.skills : [];
     skills = (skills || []).map(function (s) { return String(s).toLowerCase(); });
 
