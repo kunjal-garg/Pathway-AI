@@ -2386,35 +2386,112 @@
 
   <script src="pathwayai-assessment-banks.js"></script>
   <script>
+  // Public anon key — use the same value as INSFORGE_ANON_KEY (or INSFORGE_API_KEY) in .env
   const INSFORGE_ANON_KEY = "";
   const INSFORGE_PROJECT_URL = "https://f3mggxws.us-east.insforge.app/";
+  const INSFORGE_PROJECT_ID = "110e968b-9c39-4c31-ac49-eb2cad4bbec7";
   const INSFORGE_TOKEN_KEY = "pathwayai_insforge_access_token_v1";
+  const INSFORGE_RESUME_BUCKET = "resumes";
 
+  var _insforgeClientSingleton = null;
+  function rehydrateInsforgeTokenOnClient(c) {
+    if (!c || !c.getHttpClient) return c;
+    try {
+      var t = localStorage.getItem(INSFORGE_TOKEN_KEY);
+      if (t) c.getHttpClient().setAuthToken(t);
+    } catch (e) {}
+    return c;
+  }
+  function clearInsforgeClientCache() {
+    _insforgeClientSingleton = null;
+  }
   function getInsforgeClient() {
+    if (_insforgeClientSingleton) {
+      return rehydrateInsforgeTokenOnClient(_insforgeClientSingleton);
+    }
     var g = typeof window !== "undefined" ? window : {};
+    var inst = null;
     if (g.InsForge && typeof g.InsForge === "function") {
       try {
-        return new g.InsForge({
-          projectUrl: INSFORGE_PROJECT_URL,
-          apiKey: INSFORGE_ANON_KEY
-        });
+        inst = new g.InsForge({ projectUrl: INSFORGE_PROJECT_URL, apiKey: INSFORGE_ANON_KEY });
       } catch (e) {}
     }
-    var create = typeof createClient === "function" ? createClient : g.createClient;
-    if (typeof create !== "function" && g.Insforge) {
-      create = g.Insforge.createClient || g.Insforge.create;
+    if (!inst) {
+      var create = typeof createClient === "function" ? createClient : g.createClient;
+      if (typeof create !== "function" && g.Insforge) {
+        create = g.Insforge.createClient || g.Insforge.create;
+      }
+      if (typeof create !== "function" && g.InsforgeSDK) {
+        create = g.InsforgeSDK.createClient;
+      }
+      if (typeof create !== "function" && g.insforge) {
+        create = g.insforge.createClient;
+      }
+      if (typeof create !== "function") {
+        throw new Error("INSFORGE_SDK");
+      }
+      var base = String(INSFORGE_PROJECT_URL).replace(/\/$/, "");
+      inst = create({ baseUrl: base, anonKey: INSFORGE_ANON_KEY, timeout: 120000 });
     }
-    if (typeof create !== "function" && g.InsforgeSDK) {
-      create = g.InsforgeSDK.createClient;
+    _insforgeClientSingleton = inst;
+    return rehydrateInsforgeTokenOnClient(_insforgeClientSingleton);
+  }
+  function pathwayaiInsforgeInvoke(slug, body) {
+    var c = getInsforgeClient();
+    if (!c.functions || !c.functions.invoke) {
+      return Promise.reject(new Error("INSFORGE_FUNCTIONS"));
     }
-    if (typeof create !== "function" && g.insforge) {
-      create = g.insforge.createClient;
+    return c.functions.invoke(slug, { body: body || {} });
+  }
+  async function uploadResumeFileToInsforgeStorage(file) {
+    if (!file) return null;
+    try {
+      var c = getInsforgeClient();
+      var uid = getOrCreateSessionUserId();
+      var key = uid + "/" + Date.now() + "-" + (file.name || "resume.pdf");
+      var up = await c.storage.from(INSFORGE_RESUME_BUCKET).upload(key, file);
+      if (up.error) return null;
+      var url = "";
+      try {
+        url = c.storage.from(INSFORGE_RESUME_BUCKET).getPublicUrl(key) || "";
+      } catch (e) {}
+      return { key: key, publicUrl: url };
+    } catch (e) {
+      return null;
     }
-    if (typeof create !== "function") {
-      throw new Error("INSFORGE_SDK");
+  }
+  async function tryEnrichParseWithInsforgeServer(resumeText, localParsed) {
+    if (!resumeText || String(resumeText).length < 8) return localParsed;
+    try {
+      var r = await pathwayaiInsforgeInvoke("parse-resume", { resumeText: String(resumeText).slice(0, 50000) });
+      if (r && r.error) return localParsed;
+      var d = r && r.data;
+      if (!d || typeof d !== "object") return localParsed;
+      return Object.assign({}, localParsed || {}, {
+        skills: d.skills || (localParsed && localParsed.skills) || null,
+        education: d.education || (localParsed && localParsed.education) || null,
+        experience: d.experience || (localParsed && localParsed.experience) || null,
+        name: d.name || (localParsed && localParsed.name),
+        email: d.email || (localParsed && localParsed.email)
+      });
+    } catch (e) {
+      return localParsed;
     }
-    var base = String(INSFORGE_PROJECT_URL).replace(/\/$/, "");
-    return create({ baseUrl: base, anonKey: INSFORGE_ANON_KEY });
+  }
+  function syncSaveProgressToInsforge(moduleName, lessonIdx) {
+    var tok = null;
+    try {
+      tok = localStorage.getItem(INSFORGE_TOKEN_KEY);
+    } catch (e) {}
+    if (!tok) return;
+    try {
+      pathwayaiInsforgeInvoke("save-progress", {
+        userId: getOrCreateSessionUserId(),
+        moduleId: String(moduleName),
+        lessonIndex: lessonIdx,
+        completed: true
+      }).catch(function () {});
+    } catch (e2) {}
   }
 
   function insforgeEmailSignIn(client, email, password) {
@@ -2446,43 +2523,6 @@
     }
   }
 
-  var PATHWAYAI_API_BASE = "http://localhost:3001";
-  var _pathwayaiApiConfigPromise = null;
-  function pathwayaiApiUrl(path) {
-    var p = path == null ? "" : String(path);
-    if (p.indexOf("/") !== 0) p = "/" + p;
-    return String(PATHWAYAI_API_BASE).replace(/\/$/, "") + p;
-  }
-  function loadPathwayaiApiBase() {
-    if (_pathwayaiApiConfigPromise) return _pathwayaiApiConfigPromise;
-    _pathwayaiApiConfigPromise = (function () {
-      var configUrl;
-      try {
-        var pr = location.port || "";
-        if (pr === "3001") {
-          configUrl = location.protocol + "//" + location.host + "/api/config";
-        } else if (pr === "9000" || pr === "8080" || pr === "5500" || pr === "4173" || pr === "3000") {
-          configUrl = "http://localhost:3001/api/config";
-        } else {
-          configUrl = location.protocol + "//" + location.host + "/api/config";
-        }
-      } catch (e) {
-        configUrl = "http://localhost:3001/api/config";
-      }
-      return fetch(configUrl, { credentials: "same-origin" })
-        .then(function (r) {
-          return r.json();
-        })
-        .then(function (c) {
-          if (c && c.apiBase) {
-            PATHWAYAI_API_BASE = String(c.apiBase).replace(/\/$/, "");
-          }
-        })
-        .catch(function () {});
-    })();
-    return _pathwayaiApiConfigPromise;
-  }
-  loadPathwayaiApiBase();
   const state = {
     email: "",
     displayName: "there",
@@ -2946,6 +2986,7 @@ function assessmentMatchesSession(c) {
     try {
       localStorage.removeItem(INSFORGE_TOKEN_KEY);
     } catch (e2) {}
+    clearInsforgeClientCache();
     clearAllPathwayAIStorage();
     // Reset in-memory state
     state.email = "";
@@ -3936,11 +3977,22 @@ function startScanSequence() {
         if (ui) ui.style.display = "flex";
         if (status) status.textContent = "Reading your resume…";
 
-        const parsed = await parsePdfResume(resumeFile.files[0]);
+        var f0 = resumeFile.files[0];
+        var st = null;
+        try { st = await uploadResumeFileToInsforgeStorage(f0); } catch (e) {}
+        var parsed = await parsePdfResume(f0);
         if (parsed) {
+          if (parsed.rawText) {
+            try { parsed = await tryEnrichParseWithInsforgeServer(parsed.rawText, parsed); } catch (e) {}
+          }
+          var rmeta = { filename: f0.name };
+          if (st && st.key) {
+            rmeta.storageKey = st.key;
+            if (st.publicUrl) rmeta.fileUrl = st.publicUrl;
+          }
           // Persist as requested
           try { localStorage.setItem("pathwayai_resumeData", JSON.stringify(parsed)); } catch (err) {}
-          saveAppState({ resumeParsed: parsed });
+          saveAppState({ resumeParsed: parsed, resumeMeta: rmeta });
           try {
             localStorage.setItem("pathwayai_prelimScores", JSON.stringify(getResumeOnlySkillSnapshot()));
           } catch (err) {}
@@ -4812,7 +4864,6 @@ function startScanSequence() {
   }
 
   async function fetchGapReport(payload) {
-    await loadPathwayaiApiBase();
     var jobUrl = getJobUrlForGapApi();
     var apiPayload = {
       userId: getOrCreateSessionUserId(),
@@ -4820,35 +4871,26 @@ function startScanSequence() {
       resumeText: getResumeTextForGapApi(),
       assessmentAnswers: state.assessmentAnswers || []
     };
-    var controller = new AbortController();
-    var tid = window.setTimeout(function () {
-      controller.abort();
-    }, 3000);
     try {
-      var res = await fetch(pathwayaiApiUrl("/api/analyze-gap"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(apiPayload),
-        signal: controller.signal
-      });
-      window.clearTimeout(tid);
-
-      if (!res.ok) {
-        throw new Error("HTTP " + res.status);
+      getInsforgeClient();
+    } catch (e) {
+      return;
+    }
+    try {
+      var out = await pathwayaiInsforgeInvoke("analyze-gap", apiPayload);
+      if (out && out.error) {
+        throw new Error(out.error.message || "insforge");
       }
-
-      var result = await res.json();
+      var result = out && out.data;
+      if (!result) throw new Error("no data");
       if (result && result.error) {
         throw new Error(result.error || "API error");
       }
-
       try {
         localStorage.setItem("pathwayai_gapReport", JSON.stringify(result));
       } catch (e) {}
-
       applyGapReportToPayload(payload, result);
     } catch (err) {
-      window.clearTimeout(tid);
     }
   }
 
@@ -4960,6 +5002,7 @@ function startScanSequence() {
     }
     prog[moduleName] = arr;
     saveModuleProgress(prog);
+    syncSaveProgressToInsforge(moduleName, lessonIdx);
     if (arr.length >= 5) {
       applyModuleCompletionBoost(moduleName);
     }
