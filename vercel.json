@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/app", "destination": "/pathwayai.html" },
+    { "source": "/app/", "destination": "/pathwayai.html" }
+  ]
+}

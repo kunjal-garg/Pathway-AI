@@ -1890,6 +1890,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdn.insforge.dev/insforge-js/v2/insforge.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script>
     // Configure PDF.js worker (same version).
     window.__pdfjsWorkerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
@@ -2385,6 +2386,66 @@
 
   <script src="pathwayai-assessment-banks.js"></script>
   <script>
+  const INSFORGE_ANON_KEY = "";
+  const INSFORGE_PROJECT_URL = "https://f3mggxws.us-east.insforge.app/";
+  const INSFORGE_TOKEN_KEY = "pathwayai_insforge_access_token_v1";
+
+  function getInsforgeClient() {
+    var g = typeof window !== "undefined" ? window : {};
+    if (g.InsForge && typeof g.InsForge === "function") {
+      try {
+        return new g.InsForge({
+          projectUrl: INSFORGE_PROJECT_URL,
+          apiKey: INSFORGE_ANON_KEY
+        });
+      } catch (e) {}
+    }
+    var create = typeof createClient === "function" ? createClient : g.createClient;
+    if (typeof create !== "function" && g.Insforge) {
+      create = g.Insforge.createClient || g.Insforge.create;
+    }
+    if (typeof create !== "function" && g.InsforgeSDK) {
+      create = g.InsforgeSDK.createClient;
+    }
+    if (typeof create !== "function" && g.insforge) {
+      create = g.insforge.createClient;
+    }
+    if (typeof create !== "function") {
+      throw new Error("INSFORGE_SDK");
+    }
+    var base = String(INSFORGE_PROJECT_URL).replace(/\/$/, "");
+    return create({ baseUrl: base, anonKey: INSFORGE_ANON_KEY });
+  }
+
+  function insforgeEmailSignIn(client, email, password) {
+    if (client.auth && typeof client.auth.signIn === "function") {
+      return client.auth.signIn({ email: email, password: password });
+    }
+    return client.auth.signInWithPassword({ email: email, password: password });
+  }
+
+  function insforgeSignInWithGoogle(client) {
+    var redirectTo = location.origin + location.pathname;
+    if (client.auth && typeof client.auth.signInWithOAuth === "function") {
+      return client.auth.signInWithOAuth({ provider: "google", redirectTo: redirectTo });
+    }
+    return Promise.reject(new Error("INSFORGE_OAUTH"));
+  }
+
+  function persistInsforgeAccessToken(client, data) {
+    var token = data && data.accessToken ? data.accessToken : null;
+    if (!token && client && client.tokenManager && typeof client.tokenManager.getAccessToken === "function") {
+      try {
+        token = client.tokenManager.getAccessToken();
+      } catch (e) {}
+    }
+    if (token) {
+      try {
+        localStorage.setItem(INSFORGE_TOKEN_KEY, token);
+      } catch (e2) {}
+    }
+  }
+
   var PATHWAYAI_API_BASE = "http://localhost:3001";
   var _pathwayaiApiConfigPromise = null;
   function pathwayaiApiUrl(path) {
@@ -2807,11 +2868,34 @@ function assessmentMatchesSession(c) {
       if (!email || email.indexOf("@") === -1) return alert("Please enter a valid email.");
       if (p1.length < 6) return alert("Password must be at least 6 characters.");
       if (p1 !== p2) return alert("Passwords do not match.");
-      var creds = loadCreds();
-      creds[email.toLowerCase()] = { name: name, email: email, password: p1 };
-      saveCreds(creds);
-      setAuthedUser(email, name, "password");
-      goToGoalsAfterAuth();
+      var c;
+      try {
+        c = getInsforgeClient();
+      } catch (err) {
+        return alert("Invalid email or password.");
+      }
+      c.auth
+        .signUp({
+          email: email,
+          password: p1,
+          name: name,
+          redirectTo: location.origin + location.pathname
+        })
+        .then(function (result) {
+          var data = result && result.data;
+          var err = result && result.error;
+          if (err) return alert(err.message || "Invalid email or password.");
+          if (data && data.requireEmailVerification && !data.accessToken) return;
+          if (data && data.accessToken) persistInsforgeAccessToken(c, data);
+          var u = data && data.user;
+          var em = (u && u.email) || email;
+          var disp = (u && u.profile && u.profile.name) || name;
+          setAuthedUser(em, disp, "password");
+          goToGoalsAfterAuth();
+        })
+        .catch(function (e) {
+          alert((e && e.message) || "Invalid email or password.");
+        });
     });
 
     var btnLogin2 = document.getElementById("btn-login");
@@ -2819,11 +2903,30 @@ function assessmentMatchesSession(c) {
       var email = (document.getElementById("li-email").value || "").trim().toLowerCase();
       var pw = (document.getElementById("li-pass").value || "");
       if (!email || email.indexOf("@") === -1) return alert("Please enter a valid email.");
-      var creds = loadCreds();
-      var rec = creds[email];
-      if (!rec || rec.password !== pw) return alert("Invalid email or password.");
-      setAuthedUser(rec.email || email, rec.name || "there", "password");
-      goToGoalsAfterAuth();
+      var c;
+      try {
+        c = getInsforgeClient();
+      } catch (err) {
+        return alert("Invalid email or password.");
+      }
+      insforgeEmailSignIn(c, email, pw)
+        .then(function (result) {
+          var data = result && result.data;
+          var err = result && result.error;
+          if (err) return alert(err.message || "Invalid email or password.");
+          if (!data) return alert("Invalid email or password.");
+          persistInsforgeAccessToken(c, data);
+          var u = data.user;
+          var em = (u && u.email) || email;
+          var disp = (u && u.profile && u.profile.name) || "";
+          if (!disp) setDisplayNameFromEmail(em);
+          else state.displayName = disp;
+          setAuthedUser(em, state.displayName, "password");
+          goToGoalsAfterAuth();
+        })
+        .catch(function (e) {
+          alert((e && e.message) || "Invalid email or password.");
+        });
     });
 
     var contactForm = document.getElementById("contact-form");
@@ -2836,6 +2939,13 @@ function assessmentMatchesSession(c) {
   }
 
   document.getElementById("btn-signout").addEventListener("click", function () {
+    try {
+      var c = getInsforgeClient();
+      if (c.auth && c.auth.signOut) c.auth.signOut().catch(function () {});
+    } catch (e) {}
+    try {
+      localStorage.removeItem(INSFORGE_TOKEN_KEY);
+    } catch (e2) {}
     clearAllPathwayAIStorage();
     // Reset in-memory state
     state.email = "";
@@ -2862,11 +2972,72 @@ function assessmentMatchesSession(c) {
     if (ri) ri.focus();
   }
 
+  function bootstrapInsforgeSession() {
+    var c;
+    try {
+      c = getInsforgeClient();
+    } catch (e) {
+      return;
+    }
+    return c.auth.getCurrentUser().then(function (res) {
+      if (res && res.data && res.data.user) {
+        var u = res.data.user;
+        var em = u.email || "";
+        var name = (u.profile && u.profile.name) || "";
+        if (em) {
+          if (!name) setDisplayNameFromEmail(em);
+          else state.displayName = name;
+          setAuthedUser(em, state.displayName, "insforge");
+        }
+        persistInsforgeAccessToken(c, { accessToken: null });
+        return;
+      }
+      var t = null;
+      try {
+        t = localStorage.getItem(INSFORGE_TOKEN_KEY);
+      } catch (e2) {}
+      if (!t) return;
+      c.getHttpClient().setAuthToken(t);
+      return c
+        .getHttpClient()
+        .get("/api/auth/sessions/current", { credentials: "include" })
+        .then(function (body) {
+          if (body && body.user) {
+            var u = body.user;
+            var em = u.email || "";
+            var name = (u.profile && u.profile.name) || "";
+            if (em) {
+              if (!name) setDisplayNameFromEmail(em);
+              else state.displayName = name;
+              setAuthedUser(em, state.displayName, "insforge");
+            }
+            persistInsforgeAccessToken(c, { accessToken: t });
+          } else {
+            c.getHttpClient().setAuthToken(null);
+            try {
+              localStorage.removeItem(INSFORGE_TOKEN_KEY);
+            } catch (e3) {}
+          }
+        })
+        .catch(function () {
+          c.getHttpClient().setAuthToken(null);
+          try {
+            localStorage.removeItem(INSFORGE_TOKEN_KEY);
+          } catch (e4) {}
+        });
+    });
+  }
+
   document.getElementById("btn-google").addEventListener("click", function () {
-    state.email = "student.university@gmail.com";
-    setDisplayNameFromEmail(state.email);
-    setAuthedUser(state.email, state.displayName, "google");
-    goToGoalsAfterAuth();
+    var c;
+    try {
+      c = getInsforgeClient();
+    } catch (err) {
+      return alert("Invalid email or password.");
+    }
+    insforgeSignInWithGoogle(c).catch(function (e) {
+      alert((e && e.message) || "Invalid email or password.");
+    });
   });
 
   document.getElementById("btn-college-email").addEventListener("click", function () {
@@ -5572,6 +5743,7 @@ function generateSkillScores(seed) {
   hydrateFromStorage();
   syncGoalFormFromState();
   setupAuthCard();
+  bootstrapInsforgeSession();
 
   document.getElementById("btn-retake-assessment").addEventListener("click", function () {
     clearAssessmentStorage();

@@ -20,6 +20,7 @@
   },
   "homepage": "https://github.com/kunjal-garg/Pathway-AI#readme",
   "dependencies": {
+    "@insforge/insforge-js": "npm:@insforge/sdk@^1.2.5",
     "axios": "^1.15.2",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
