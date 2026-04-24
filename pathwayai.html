@@ -2959,6 +2959,9 @@
     }
     }
     resetScreen4ResumeUi();
+    if (state.profileMode === "manual" || (loadAppState() || {}).profileMode === "manual") {
+      try { restoreManualFormIfNeeded(); } catch (e) {}
+    }
   }
 
   function loadAppState() {
@@ -3119,13 +3122,18 @@ function clearAllAppStorage() {
         }
       }
 
-      // Work/projects dynamic blocks are built on selecting manual; values will be restored then.
       state._manualWork = s.manual.work || [];
       state._manualProjects = s.manual.projects || [];
     }
 
     if (typeof state.profileMode === "string" && state.profileMode) {
       applyProfileModeUi(state.profileMode);
+    }
+    if (state.profileMode === "manual") {
+      buildWorkProjectBlocks();
+      renderManualSkillSuggestions();
+      try { bindManualPersistence(); } catch (e) {}
+      if (s.manual) applyManualFormValuesToDom(s.manual);
     }
   }
 function assessmentMatchesSession(c) {
@@ -3414,6 +3422,7 @@ function assessmentMatchesSession(c) {
           setAuthedUser(em, state.displayName, "insforge");
         }
         rehydrateResumeStateFromStorage();
+        try { setTimeout(function () { tryLoadRemoteManualProfile().catch(function () {}); }, 0); } catch (e) {}
         persistInsforgeAccessToken(c, { accessToken: null });
         return;
       }
@@ -3438,6 +3447,7 @@ function assessmentMatchesSession(c) {
               setAuthedUser(em, state.displayName, "insforge");
             }
             rehydrateResumeStateFromStorage();
+            try { setTimeout(function () { tryLoadRemoteManualProfile().catch(function () {}); }, 0); } catch (e) {}
             persistInsforgeAccessToken(c, { accessToken: t });
           } else {
             c.getHttpClient().setAuthToken(null);
@@ -3875,12 +3885,29 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
       var displayN = parsed && (parsed.displayName || parsed.name) ? (parsed.displayName || parsed.name) : null;
       if (displayN) displayN = String(displayN).trim().split(/\s+/).slice(0, 6).join(" ");
       else displayN = null;
-      var em = parsed && parsed.email ? parsed.email : null;
+      if (!displayN) displayN = (s.manual && s.manual.name) ? String(s.manual.name).trim() : name;
+      var em = (parsed && parsed.email) || (state && state.email) || null;
       var ph = parsed && parsed.phone ? parsed.phone : null;
 
+      function formatEduItem(x) {
+        if (!x) return "";
+        if (typeof x === "string") return clampSummaryLine(x, 96);
+        if (x.school || x.degree) {
+          return clampSummaryLine([x.degree, x.school, x.year].filter(Boolean).join(" — ") || (x.school || ""), 96);
+        }
+        return "";
+      }
+      function formatExpItem(x) {
+        if (!x) return "";
+        if (typeof x === "string") return clampSummaryLine(x, 96);
+        if (x.role || x.company) {
+          return clampSummaryLine((x.role || "") + " at " + (x.company || "") + (x.duration ? " " + x.duration : ""), 96);
+        }
+        return "";
+      }
       var eduLines = [];
       if (parsed && parsed.education && parsed.education.length) {
-        eduLines = parsed.education.slice(0, 2).map(function (x) { return clampSummaryLine(String(x), 96); });
+        eduLines = parsed.education.slice(0, 2).map(formatEduItem).filter(function (L) { return L && L.length; });
       } else if (parsed && parsed.educationDisplay && parsed.educationDisplay.length) {
         eduLines = parsed.educationDisplay.slice(0, 2).map(function (x) { return clampSummaryLine(String(x), 96); });
       }
@@ -3888,7 +3915,7 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
       var expMax = isLIEx ? 3 : 2;
       var expLines = [];
       if (parsed && parsed.experience && parsed.experience.length) {
-        expLines = parsed.experience.slice(0, expMax).map(function (x) { return clampSummaryLine(String(x), 96); });
+        expLines = parsed.experience.slice(0, expMax).map(formatExpItem).filter(function (L) { return L && L.length; });
       } else if (parsed && parsed.experienceDisplay && parsed.experienceDisplay.length) {
         expLines = parsed.experienceDisplay.slice(0, expMax).map(function (x) { return clampSummaryLine(String(x), 96); });
       }
@@ -4019,9 +4046,13 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
 
     var snapNote = document.getElementById("profile-ready-snap-note");
     if (snapNote) {
-      snapNote.textContent = isLIEx
-        ? "Based on your LinkedIn export — scores will be refined after your assessment"
-        : "Based on your resume only — scores will be refined after your assessment";
+      if (isLIEx) {
+        snapNote.textContent = "Based on your LinkedIn export — scores will be refined after your assessment";
+      } else if (state.profileMode === "manual" || (parsed && parsed.sourceManual)) {
+        snapNote.textContent = "Based on your profile — scores will be refined after your assessment";
+      } else {
+        snapNote.textContent = "Based on your resume only — scores will be refined after your assessment";
+      }
     }
 
     var bars = document.getElementById("profile-ready-bars");
@@ -5158,6 +5189,8 @@ function startScanSequence() {
       if (!el || el._persistBound) return;
       el._persistBound = true;
       el.addEventListener("input", function () {
+        var workSnapshot = readManualWorkBlocksFromDom();
+        var projSnapshot = readManualProjectBlocksFromDom();
         saveAppState({
           manual: {
             name: document.getElementById("mp-name").value,
@@ -5169,11 +5202,314 @@ function startScanSequence() {
             gpa: document.getElementById("mp-gpa").value,
             certs: document.getElementById("mp-certs").value,
             extra: document.getElementById("mp-extra").value,
-            skills: state.manualSkills.slice()
+            skills: state.manualSkills.slice(),
+            work: workSnapshot,
+            projects: projSnapshot
           }
         });
+        try {
+          state._manualWork = workSnapshot;
+          state._manualProjects = projSnapshot;
+        } catch (e) {}
       });
     });
+  }
+
+  function readManualWorkBlocksFromDom() {
+    var out = [];
+    for (var i = 1; i <= 3; i++) {
+      var co = document.getElementById("work-" + i + "-co");
+      var ro = document.getElementById("work-" + i + "-role");
+      var du = document.getElementById("work-" + i + "-dur");
+      var d = document.getElementById("work-" + i + "-desc");
+      out.push({
+        company: co && "value" in co ? String(co.value || "").trim() : "",
+        role: ro && "value" in ro ? String(ro.value || "").trim() : "",
+        duration: du && "value" in du ? String(du.value || "").trim() : "",
+        description: d && "value" in d ? String(d.value || "").trim() : ""
+      });
+    }
+    return out;
+  }
+
+  function readManualProjectBlocksFromDom() {
+    var out = [];
+    for (var j = 1; j <= 3; j++) {
+      out.push({
+        name: (function () {
+          var el = document.getElementById("proj-" + j + "-name");
+          return el && "value" in el ? String(el.value || "").trim() : "";
+        })(),
+        tech: (function () {
+          var el = document.getElementById("proj-" + j + "-tech");
+          return el && "value" in el ? String(el.value || "").trim() : "";
+        })(),
+        description: (function () {
+          var el = document.getElementById("proj-" + j + "-desc");
+          return el && "value" in el ? String(el.value || "").trim() : "";
+        })()
+      });
+    }
+    return out;
+  }
+
+  function collectManualFormFromDom() {
+    var manual = {
+      name: (function () {
+        var el = document.getElementById("mp-name");
+        return el && "value" in el ? String(el.value || "").trim() : "";
+      })(),
+      city: (function () {
+        var el = document.getElementById("mp-city");
+        return el && "value" in el ? String(el.value || "").trim() : "";
+      })(),
+      school: (function () {
+        var el = document.getElementById("mp-school");
+        return el && "value" in el ? String(el.value || "").trim() : "";
+      })(),
+      degree: (function () {
+        var el = document.getElementById("mp-degree");
+        return el && "value" in el ? String(el.value || "").trim() : "";
+      })(),
+      major: (function () {
+        var el = document.getElementById("mp-major");
+        return el && "value" in el ? String(el.value || "").trim() : "";
+      })(),
+      gradYear: (function () {
+        var el = document.getElementById("mp-year");
+        return el && "value" in el ? String(el.value || "").trim() : "";
+      })(),
+      gpa: (function () {
+        var el = document.getElementById("mp-gpa");
+        return el && "value" in el ? String(el.value || "").trim() : "";
+      })(),
+      certs: (function () {
+        var el = document.getElementById("mp-certs");
+        return el && "value" in el ? String(el.value || "").trim() : "";
+      })(),
+      extra: (function () {
+        var t = document.getElementById("mp-extra");
+        return t && "value" in t ? String(t.value || "").trim() : "";
+      })(),
+      email: (state && state.email) ? String(state.email).trim() : "",
+      phone: "",
+      skills: (state.manualSkills && state.manualSkills.length) ? state.manualSkills.map(function (x) { return String(x).trim(); }).filter(Boolean) : [],
+      work: readManualWorkBlocksFromDom(),
+      projects: readManualProjectBlocksFromDom()
+    };
+    return manual;
+  }
+
+  function buildManualResumeParsedObject(manual) {
+    if (!manual || typeof manual !== "object") manual = {};
+    var name = (manual.name && String(manual.name).trim()) || (state.displayName && String(state.displayName)) || "there";
+    var displayName = (manual.name && String(manual.name).trim()) || name;
+    var email = (manual.email && String(manual.email).trim()) || (state.email && String(state.email).trim()) || "";
+    var phone = (manual.phone && String(manual.phone).trim()) || "";
+    var city = (manual.city && String(manual.city).trim()) || "";
+    var skills = (manual.skills && manual.skills.length) ? manual.skills.map(function (s) { return String(s).trim(); }).filter(Boolean) : [];
+    var education = [];
+    var hasEdu = (manual.school && manual.school.trim()) || (manual.degree && manual.degree.trim()) || (manual.major && manual.major.trim()) || (manual.gradYear && manual.gradYear.trim());
+    if (hasEdu) {
+      var degParts = [manual.major, manual.degree].filter(function (x) { return x && String(x).trim(); });
+      education.push({
+        degree: (degParts.length ? degParts.join(" — ") : (manual.degree || "Degree").trim() || "Degree").slice(0, 160),
+        school: (manual.school && manual.school.trim()) ? manual.school.trim().slice(0, 200) : "—",
+        year: (manual.gradYear && String(manual.gradYear).trim()) ? String(manual.gradYear).trim() : ""
+      });
+    }
+    var educationDisplay = [];
+    for (var ei = 0; ei < education.length; ei++) {
+      var el = education[ei];
+      var l = (el.degree || "") + (el.school && el.school !== "—" ? " at " + el.school : "") + (el.year ? " — " + el.year : "");
+      l = l.replace(/^\s*at\s+/, "").trim();
+      if (l) educationDisplay.push(l);
+    }
+    var experience = [];
+    var experienceDisplay = [];
+    (manual.work || []).forEach(function (w) {
+      if (!w || typeof w !== "object") return;
+      var co = (w.company && String(w.company).trim()) || "";
+      var ro = (w.role && String(w.role).trim()) || "";
+      var du = (w.duration && String(w.duration).trim()) || "";
+      var de = (w.description && String(w.description).trim()) || "";
+      if (!co && !ro && !du && !de) return;
+      experience.push({
+        role: ro || "Position",
+        company: co || "Company",
+        duration: du
+      });
+      var line = "";
+      if (ro && co) line = ro + " at " + co;
+      else line = (ro || co) || "Experience";
+      if (du) line = line + " · " + du;
+      if (de) line = line + (line.length > 0 ? " — " : "") + clampSummaryLine(de, 200);
+      experienceDisplay.push(line);
+    });
+    var projectLines = [];
+    (manual.projects || []).forEach(function (p) {
+      if (!p || typeof p !== "object") return;
+      var n = (p.name && String(p.name).trim()) || "";
+      var te = (p.tech && String(p.tech).trim()) || "";
+      var d = (p.description && String(p.description).trim()) || "";
+      if (!n && !d && !te) return;
+      var line = n || "Project";
+      if (d) line += (n ? " — " : "") + d;
+      if (te) line += " | " + te;
+      projectLines.push(line);
+    });
+    var certifications = [];
+    if (manual.certs) {
+      String(manual.certs).split(/[;,]/).forEach(function (c) {
+        c = c.replace(/^\s*[\-•*]\s*/, "").trim();
+        if (c) certifications.push(c);
+      });
+    }
+    var educationChips = uniqueChipsForDisplay(educationDisplayToChips(educationDisplay), 20);
+    var experienceChips = uniqueChipsForDisplay(experienceDisplayToChips(experienceDisplay), 24);
+    var projectChips = uniqueChipsForDisplay(projectLinesToChips(projectLines, ""), 28);
+    var certificationChips = uniqueChipsForDisplay(certLinesToChips(certifications), 16);
+    var skillChips = uniqueChipsForDisplay(
+      skills.map(function (s) { return normalizeSkillDisplay(String(s).toLowerCase()); }),
+      18
+    );
+    var rawParts = [];
+    rawParts.push("MANUAL PROFILE");
+    if (name) rawParts.push("Name: " + name);
+    if (city) rawParts.push("Location: " + city);
+    if (email) rawParts.push("Email: " + email);
+    if (phone) rawParts.push("Phone: " + phone);
+    (educationDisplay || []).forEach(function (ed) { if (ed) rawParts.push("Education: " + ed); });
+    (experienceDisplay || []).forEach(function (ex) { if (ex) rawParts.push("Experience: " + ex); });
+    if (skills.length) rawParts.push("Skills: " + skills.join(", "));
+    (projectLines || []).forEach(function (pr) { if (pr) rawParts.push("Project: " + pr); });
+    if (certifications.length) rawParts.push("Certifications: " + certifications.join(", "));
+    if (manual.gpa) rawParts.push("GPA: " + String(manual.gpa).trim());
+    if (manual.extra && String(manual.extra).trim()) {
+      rawParts.push("Other: " + String(manual.extra).replace(/\r\n/g, " ").replace(/\s+/g, " ").trim().slice(0, 4000));
+    }
+    var rawText = rawParts.join("\n").slice(0, 12000);
+    return {
+      name: name,
+      displayName: displayName,
+      email: email,
+      phone: phone || null,
+      skills: skills,
+      education: education,
+      experience: experience,
+      educationDisplay: educationDisplay,
+      experienceDisplay: experienceDisplay,
+      projects: projectLines,
+      certifications: certifications,
+      educationChips: educationChips,
+      experienceChips: experienceChips,
+      projectChips: projectChips,
+      certificationChips: certificationChips,
+      skillChips: skillChips,
+      sourceManual: true,
+      _manualFormSnapshot: manual,
+      rawText: rawText
+    };
+  }
+
+  function applyManualFormValuesToDom(m) {
+    if (!m || typeof m !== "object") return;
+    function setV(id, v) {
+      var el = document.getElementById(id);
+      if (el && "value" in el) el.value = (v == null) ? "" : String(v);
+    }
+    setV("mp-name", m.name);
+    setV("mp-city", m.city);
+    setV("mp-school", m.school);
+    setV("mp-degree", m.degree);
+    setV("mp-major", m.major);
+    setV("mp-year", m.gradYear);
+    setV("mp-gpa", m.gpa);
+    setV("mp-certs", m.certs);
+    setV("mp-extra", m.extra);
+    if (Array.isArray(m.skills) && m.skills.length) {
+      state.manualSkills = m.skills.map(function (x) { return String(x); });
+      var manualSkillsTags = document.getElementById("manual-skills-tags");
+      if (manualSkillsTags) {
+        manualSkillsTags.innerHTML = state.manualSkills.map(function (t, i) {
+          return "<span class=\"tag\">" + escapeHtml(t) + " <button type=\"button\" data-i=\"" + i + "\">×</button></span>";
+        }).join("");
+      }
+    }
+    if (Array.isArray(m.work) && m.work.length) {
+      m.work.forEach(function (w, idx) {
+        if (!w || idx >= 3) return;
+        var i = idx + 1;
+        setV("work-" + i + "-co", w.company);
+        setV("work-" + i + "-role", w.role);
+        setV("work-" + i + "-dur", w.duration);
+        setV("work-" + i + "-desc", w.description);
+      });
+    }
+    if (Array.isArray(m.projects) && m.projects.length) {
+      m.projects.forEach(function (p, idx) {
+        if (!p || idx >= 3) return;
+        var j = idx + 1;
+        setV("proj-" + j + "-name", p.name);
+        setV("proj-" + j + "-tech", p.tech);
+        setV("proj-" + j + "-desc", p.description);
+      });
+    }
+  }
+
+  function restoreManualFormIfNeeded() {
+    var s = loadAppState() || {};
+    if (s.profileMode !== "manual" && state.profileMode !== "manual") return;
+    if (s.profileMode === "manual") state.profileMode = "manual";
+    buildWorkProjectBlocks();
+    renderManualSkillSuggestions();
+    bindManualPersistence();
+    if (s.manual) applyManualFormValuesToDom(s.manual);
+  }
+
+  function persistManualProfileRemote(manualForm, parsed) {
+    try {
+      if (!localStorage.getItem(INSFORGE_TOKEN_KEY)) return;
+    } catch (e) {
+      return;
+    }
+    if (!getInsforgeUserIdForResume()) return;
+    try {
+      pathwayaiInsforgeInvoke("save-resume-profile", {
+        profile: parsed,
+        manualForm: manualForm
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
+  async function tryLoadRemoteManualProfile() {
+    try {
+      if (!getInsforgeUserIdForResume()) return;
+      var tok = null;
+      try { tok = localStorage.getItem(INSFORGE_TOKEN_KEY); } catch (e) { return; }
+      if (!tok) return;
+      if (readScopedResumeParsed()) return;
+      var out = await pathwayaiInsforgeInvoke("get-resume-profile", {});
+      var d = out && (out.data && typeof out.data === "object" ? out.data : out);
+      if (!d || d.profile == null) return;
+      if (d.manualForm) {
+        state._manualWork = d.manualForm.work;
+        state._manualProjects = d.manualForm.projects;
+        if (Array.isArray(d.manualForm.skills)) state.manualSkills = d.manualForm.skills.slice();
+        state.profileMode = "manual";
+        saveAppState({ manual: d.manualForm, profileMode: "manual" });
+      }
+      state.resumeParsed = d.profile;
+      state._resumePendingChooser = false;
+      if (d.profile && d.profile.displayName) {
+        state.displayName = String(d.profile.displayName).split(/\s+/).slice(0, 1).join(" ") || state.displayName;
+      } else if (d.profile && d.profile.name) {
+        state.displayName = String(d.profile.name).split(/\s+/).slice(0, 1).join(" ");
+      }
+      try {
+        saveAppState({ resumeParsed: d.profile, displayName: state.displayName, profileMode: "manual" });
+      } catch (e2) {}
+    } catch (e) {}
   }
 
   document.getElementById("btn-profile-continue").addEventListener("click", function () {
@@ -5218,7 +5554,47 @@ function startScanSequence() {
       showScreen("screen-4-ready");
       return;
     }
-    showScreen("screen-5");
+    if (state.profileMode === "manual") {
+      var manualF = null;
+      try { manualF = collectManualFormFromDom(); } catch (e) { manualF = {}; }
+      if (!manualF) manualF = {};
+      if (!Array.isArray(manualF.skills)) manualF.skills = (state.manualSkills && state.manualSkills.length) ? state.manualSkills.slice() : [];
+      var built = null;
+      try { built = buildManualResumeParsedObject(manualF); } catch (e) { built = { skills: [], rawText: "MANUAL PROFILE" }; }
+      if (!built) built = { skills: [], rawText: "MANUAL PROFILE" };
+      state._resumePendingChooser = false;
+      state.resumeParsed = built;
+      if (manualF.name && String(manualF.name).trim()) {
+        var fns = String(manualF.name).trim().split(/\s+/);
+        if (fns[0]) state.displayName = fns[0];
+        try { saveAppState({ displayName: state.displayName }); } catch (e) {}
+      }
+      state.manualSkills = (Array.isArray(built.skills) && built.skills.length) ? built.skills : (state.manualSkills || []);
+      var manualForStore = {
+        name: manualF.name, city: manualF.city, school: manualF.school, degree: manualF.degree, major: manualF.major,
+        gradYear: manualF.gradYear, gpa: manualF.gpa, certs: manualF.certs, extra: manualF.extra,
+        skills: (state.manualSkills && state.manualSkills.length) ? state.manualSkills.slice() : [],
+        work: manualF.work, projects: manualF.projects
+      };
+      try {
+        state._manualWork = manualF.work;
+        state._manualProjects = manualF.projects;
+      } catch (e) {}
+      try {
+        saveAppState({
+          resumeParsed: state.resumeParsed,
+          resumeMeta: { filename: "Manual profile", storageKey: "manual" },
+          displayName: state.displayName,
+          profileMode: "manual",
+          manual: manualForStore
+        });
+      } catch (e2) {}
+      try { savePrelimScoresToScoped(getResumeOnlySkillSnapshot()); } catch (e3) {}
+      try { persistManualProfileRemote(manualForStore, state.resumeParsed); } catch (e4) {}
+      showScreen("screen-4-ready");
+      return;
+    }
+    alert("Pick a profile option to continue.");
   });
 
   function pathwayaiTakeAssessment() {
@@ -5274,6 +5650,12 @@ function startScanSequence() {
 
   function buildInterviewQuestionList() {
     var rk = state.role || (loadAppState() || {}).role || localStorage.getItem("pathwayai_role") || "Data Analyst";
+    try {
+      var pr = getActiveResumeParsed();
+      if (pr && pr.skills && pr.skills.length) {
+        rk = rk + " " + pr.skills.slice(0, 5).map(function (x) { return String(x).toLowerCase(); }).join(" ");
+      }
+    } catch (e) {}
     var bank = pickInterviewBank(rk);
     if (!bank || !bank.length) bank = INTERVIEW_BANKS.generic;
     assessQuestions = shuffleArray(bank).slice(0, ASSESS_TOTAL);
@@ -5453,6 +5835,7 @@ function startScanSequence() {
     if (p.name) parts.push("Name: " + p.name);
     if (p.displayName) parts.push("Name: " + p.displayName);
     if (p.email) parts.push("Email: " + p.email);
+    if (p.phone) parts.push("Phone: " + String(p.phone));
     if (p.skills && p.skills.length) parts.push("Skills: " + p.skills.map(function (x) { return String(x); }).join(", "));
     if (p.experience && p.experience.length) p.experience.forEach(function (x) {
       if (typeof x === "string") { parts.push(x); return; }
