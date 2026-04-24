@@ -4508,7 +4508,78 @@ function startScanSequence() {
     document.getElementById("btn-see-results").addEventListener("click", finalizeAssessmentAndGoDashboard);
   }
 
-  function finalizeAssessmentAndGoDashboard() {
+  async function fetchGapReport(payload) {
+    var role = null;
+    try {
+      role = localStorage.getItem("pathwayai_role");
+    } catch (e) {
+      role = null;
+    }
+
+    var resumeData = "";
+    try {
+      resumeData = localStorage.getItem("pathwayai_resumeData") || "";
+    } catch (e) {
+      resumeData = "";
+    }
+
+    var assessmentAnswers = state.assessmentAnswers || [];
+
+    var controller = new AbortController();
+    var tid = window.setTimeout(function () {
+      controller.abort();
+    }, 3000);
+
+    try {
+      var res = await fetch("http://localhost:3001/api/analyze-gap", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: localStorage.getItem("pathwayai_email") || "guest",
+          jobUrl: "",
+          resumeText: resumeData || "",
+          assessmentAnswers: assessmentAnswers,
+        }),
+        signal: controller.signal,
+      });
+      window.clearTimeout(tid);
+
+      if (!res.ok) {
+        throw new Error("HTTP " + res.status);
+      }
+
+      var result = await res.json();
+      if (result && result.error) {
+        throw new Error(result.error || "API error");
+      }
+
+      try {
+        localStorage.setItem("pathwayai_gapReport", JSON.stringify(result));
+      } catch (e) {}
+
+      var rawFs = result && result.finalScore != null ? Number(result.finalScore) : NaN;
+      if (payload && payload.skills && payload.skills.length && !isNaN(rawFs)) {
+        var fs = Math.min(95, Math.max(0, Math.round(rawFs)));
+        payload.skills = payload.skills.map(function (s) {
+          var blended = Math.round((Number(s.pct || 0) + fs) / 2);
+          blended = Math.min(95, Math.max(28, blended));
+          return Object.assign({}, s, { pct: blended });
+        });
+        payload.readiness = Math.round(
+          payload.skills.reduce(function (a, b) {
+            return a + (b.pct || 0);
+          }, 0) / payload.skills.length
+        );
+      }
+
+      console.log("Gap report from backend:", result);
+    } catch (err) {
+      window.clearTimeout(tid);
+      console.log("Backend unavailable, using mock data");
+    }
+  }
+
+  async function finalizeAssessmentAndGoDashboard() {
     var correctCount = 0;
     for (var i = 0; i < ASSESS_TOTAL; i++) {
       var Q = assessQuestions[i];
@@ -4552,8 +4623,11 @@ function startScanSequence() {
       seed: seed,
       skills: skills,
       readiness: readiness,
-      answers: state.assessmentAnswers.slice()
+      answers: state.assessmentAnswers.slice(),
     };
+
+    await fetchGapReport(payload);
+
     saveAssessmentStorage(payload);
     state.persistedDashboard = payload;
     try { localStorage.setItem("pathwayai_skipAssessment", "false"); } catch (e) {}

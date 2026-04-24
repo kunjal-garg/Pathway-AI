@@ -4,7 +4,8 @@
   "description": "PathwayAI is a single-page web app that guides users from a marketing-style landing page through profile setup, optional resume parsing, a role-based interview assessment, and a learning dashboard with per-skill modules. Everything runs in the browser (no backend required for the core flow).",
   "main": "pathwayai-assessment-banks.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "backend": "node backend/server.js"
   },
   "repository": {
     "type": "git",
@@ -23,5 +24,10 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "concurrently": "^9.1.0",
+    "typescript": "^5.7.0"
   }
 }
