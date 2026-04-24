@@ -2385,6 +2385,43 @@
 
   <script src="pathwayai-assessment-banks.js"></script>
   <script>
+  var PATHWAYAI_API_BASE = "http://localhost:3001";
+  var _pathwayaiApiConfigPromise = null;
+  function pathwayaiApiUrl(path) {
+    var p = path == null ? "" : String(path);
+    if (p.indexOf("/") !== 0) p = "/" + p;
+    return String(PATHWAYAI_API_BASE).replace(/\/$/, "") + p;
+  }
+  function loadPathwayaiApiBase() {
+    if (_pathwayaiApiConfigPromise) return _pathwayaiApiConfigPromise;
+    _pathwayaiApiConfigPromise = (function () {
+      var configUrl;
+      try {
+        var pr = location.port || "";
+        if (pr === "3001") {
+          configUrl = location.protocol + "//" + location.host + "/api/config";
+        } else if (pr === "9000" || pr === "8080" || pr === "5500" || pr === "4173" || pr === "3000") {
+          configUrl = "http://localhost:3001/api/config";
+        } else {
+          configUrl = location.protocol + "//" + location.host + "/api/config";
+        }
+      } catch (e) {
+        configUrl = "http://localhost:3001/api/config";
+      }
+      return fetch(configUrl, { credentials: "same-origin" })
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (c) {
+          if (c && c.apiBase) {
+            PATHWAYAI_API_BASE = String(c.apiBase).replace(/\/$/, "");
+          }
+        })
+        .catch(function () {});
+    })();
+    return _pathwayaiApiConfigPromise;
+  }
+  loadPathwayaiApiBase();
   const state = {
     email: "",
     displayName: "there",
@@ -4508,39 +4545,120 @@ function startScanSequence() {
     document.getElementById("btn-see-results").addEventListener("click", finalizeAssessmentAndGoDashboard);
   }
 
+  function getOrCreateSessionUserId() {
+    try {
+      var em = localStorage.getItem("pathwayai_email");
+      if (em && String(em).trim()) return String(em).trim();
+      var t = localStorage.getItem("pathwayai_temp_user_id");
+      if (t) return t;
+      if (window.crypto && typeof window.crypto.randomUUID === "function") {
+        t = window.crypto.randomUUID();
+      } else {
+        t = "t-" + String(Date.now()) + "-" + Math.random().toString(36).slice(2, 10);
+      }
+      localStorage.setItem("pathwayai_temp_user_id", t);
+      return t;
+    } catch (e) {
+      return "guest";
+    }
+  }
+
+  function getJobUrlForGapApi() {
+    try {
+      var s = loadAppState() || {};
+      if (s.jobUrl && String(s.jobUrl).trim()) return String(s.jobUrl).trim();
+      var ju = localStorage.getItem("pathwayai_jobUrl");
+      if (ju && String(ju).trim()) return String(ju).trim();
+    } catch (e) {}
+    return null;
+  }
+
+  function getResumeTextForGapApi() {
+    var s = loadAppState() || {};
+    var p = s.resumeParsed || state.resumeParsed;
+    if (!p) {
+      try {
+        var rd = localStorage.getItem("pathwayai_resumeData");
+        if (rd) p = JSON.parse(rd);
+      } catch (e) {}
+    }
+    if (!p) return "";
+    if (p.rawText && String(p.rawText).trim()) return String(p.rawText).slice(0, 50000);
+    var parts = [];
+    if (p.name) parts.push("Name: " + p.name);
+    if (p.displayName) parts.push("Name: " + p.displayName);
+    if (p.email) parts.push("Email: " + p.email);
+    if (p.skills && p.skills.length) parts.push("Skills: " + p.skills.map(function (x) { return String(x); }).join(", "));
+    if (p.experience && p.experience.length) p.experience.forEach(function (x) {
+      if (typeof x === "string") { parts.push(x); return; }
+      if (x && x.role) {
+        parts.push((x.role || "") + " at " + (x.company || "") + (x.duration ? " — " + x.duration : ""));
+      }
+    });
+    if (p.education && p.education.length) p.education.forEach(function (x) {
+      if (x && (typeof x === "string" || (x && x.school))) {
+        if (typeof x === "string") parts.push(x);
+        else if (x.school) parts.push((x.degree || "Study") + " at " + x.school);
+      }
+    });
+    if (p.experienceDisplay && p.experienceDisplay.length) p.experienceDisplay.forEach(function (l) { if (l) parts.push(String(l)); });
+    if (p.educationDisplay && p.educationDisplay.length) p.educationDisplay.forEach(function (l) { if (l) parts.push(String(l)); });
+    return parts.join("\n").slice(0, 50000);
+  }
+
+  function applyGapReportToPayload(payload, result) {
+    if (!payload || !result) return;
+    var rawFs = result.finalScore != null ? Number(result.finalScore) : NaN;
+    if (!isNaN(rawFs)) {
+      var fsCapped = Math.min(100, Math.max(0, Math.round(rawFs)));
+      payload.readiness = fsCapped;
+    }
+    var mods = result.recommendedModules;
+    if (Array.isArray(mods) && mods.length) {
+      var base = !isNaN(rawFs) ? Math.min(95, Math.max(28, Math.round(rawFs))) : 55;
+      payload.skills = mods.map(function (m, i) {
+        var name = m && m.moduleName ? m.moduleName : m && m.skill ? m.skill : "Module " + (i + 1);
+        var pct = Math.max(28, Math.min(95, base - i * 3 - (i % 2) * 2));
+        return { name: name, pct: pct, detected: false, gapFromApi: true };
+      });
+      payload.readiness = Math.min(100, Math.max(0, isNaN(rawFs) ? Math.round(payload.skills.reduce(function (a, b) { return a + (b.pct || 0); }, 0) / payload.skills.length) : Math.round(rawFs)));
+    } else if (payload.skills && payload.skills.length && !isNaN(rawFs)) {
+      var fs = Math.min(95, Math.max(0, Math.round(rawFs)));
+      payload.skills = payload.skills.map(function (s) {
+        var blended = Math.round((Number(s.pct || 0) + fs) / 2);
+        blended = Math.min(95, Math.max(28, blended));
+        return Object.assign({}, s, { pct: blended });
+      });
+      payload.readiness = Math.round(
+        payload.skills.reduce(function (a, b) {
+          return a + (b.pct || 0);
+        }, 0) / payload.skills.length
+      );
+    }
+    try {
+      payload.gapReport = result;
+    } catch (e) {}
+  }
+
   async function fetchGapReport(payload) {
-    var role = null;
-    try {
-      role = localStorage.getItem("pathwayai_role");
-    } catch (e) {
-      role = null;
-    }
-
-    var resumeData = "";
-    try {
-      resumeData = localStorage.getItem("pathwayai_resumeData") || "";
-    } catch (e) {
-      resumeData = "";
-    }
-
-    var assessmentAnswers = state.assessmentAnswers || [];
-
+    await loadPathwayaiApiBase();
+    var jobUrl = getJobUrlForGapApi();
+    var apiPayload = {
+      userId: getOrCreateSessionUserId(),
+      jobUrl: jobUrl != null ? jobUrl : null,
+      resumeText: getResumeTextForGapApi(),
+      assessmentAnswers: state.assessmentAnswers || []
+    };
     var controller = new AbortController();
     var tid = window.setTimeout(function () {
       controller.abort();
     }, 3000);
-
     try {
-      var res = await fetch("http://localhost:3001/api/analyze-gap", {
+      var res = await fetch(pathwayaiApiUrl("/api/analyze-gap"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          userId: localStorage.getItem("pathwayai_email") || "guest",
-          jobUrl: "",
-          resumeText: resumeData || "",
-          assessmentAnswers: assessmentAnswers,
-        }),
-        signal: controller.signal,
+        body: JSON.stringify(apiPayload),
+        signal: controller.signal
       });
       window.clearTimeout(tid);
 
@@ -4557,25 +4675,9 @@ function startScanSequence() {
         localStorage.setItem("pathwayai_gapReport", JSON.stringify(result));
       } catch (e) {}
 
-      var rawFs = result && result.finalScore != null ? Number(result.finalScore) : NaN;
-      if (payload && payload.skills && payload.skills.length && !isNaN(rawFs)) {
-        var fs = Math.min(95, Math.max(0, Math.round(rawFs)));
-        payload.skills = payload.skills.map(function (s) {
-          var blended = Math.round((Number(s.pct || 0) + fs) / 2);
-          blended = Math.min(95, Math.max(28, blended));
-          return Object.assign({}, s, { pct: blended });
-        });
-        payload.readiness = Math.round(
-          payload.skills.reduce(function (a, b) {
-            return a + (b.pct || 0);
-          }, 0) / payload.skills.length
-        );
-      }
-
-      console.log("Gap report from backend:", result);
+      applyGapReportToPayload(payload, result);
     } catch (err) {
       window.clearTimeout(tid);
-      console.log("Backend unavailable, using mock data");
     }
   }
 

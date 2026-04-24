@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 
 const express = require("express");
+const cache = require('./services/cacheService');
 const cors = require("cors");
 
 const resumeService = require("./services/resumeService");
@@ -13,8 +14,29 @@ const gapAnalysisService = require("./services/gapAnalysisService");
 const app = express();
 const port = process.env.PORT || 3001;
 
+/**
+ * Public base URL for the API as seen by the browser.
+ * - Development: http://localhost:<PORT> (default 3001)
+ * - Production (e.g. InsForge): set INSFORGE_APP_URL to the deployed app origin (e.g. https://your-app.insforge.io)
+ */
+const publicApiBase = (function () {
+  var u = process.env.INSFORGE_APP_URL;
+  if (u && String(u).trim() !== "") {
+    return String(u).replace(/\/$/, "");
+  }
+  return "http://localhost:" + String(port);
+})();
+
 app.use(cors());
 app.use(express.json());
+
+app.get("/api/config", function (req, res) {
+  try {
+    res.json({ apiBase: publicApiBase });
+  } catch (error) {
+    res.status(500).json({ error: error.message, status: 500 });
+  }
+});
 
 app.get("/api/health", function (req, res) {
   try {

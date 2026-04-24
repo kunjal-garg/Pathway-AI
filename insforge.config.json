@@ -1,0 +1,22 @@
+{
+  "name": "pathwayai",
+  "buildCommand": "npm install",
+  "startCommand": "node backend/server.js",
+  "port": 3001,
+  "staticDir": "./",
+  "staticRoutes": [
+    { "path": "/", "file": "index.html" },
+    { "path": "/app", "file": "pathwayai.html" }
+  ],
+  "envVars": [
+    "INSFORGE_API_URL",
+    "INSFORGE_API_KEY",
+    "AWS_REGION",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_S3_BUCKET",
+    "TINYFISH_API_KEY",
+    "REDIS_URL",
+    "PORT"
+  ]
+}

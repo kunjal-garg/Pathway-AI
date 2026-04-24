@@ -1,7 +1,6 @@
 node_modules/
 .env
 .env.local
-
 backend/data/progress.json
 
 # InsForge & AI agent skills
@@ -18,5 +17,3 @@ backend/data/progress.json
 .roo
 .trae
 .windsurf
-.env
-.env
