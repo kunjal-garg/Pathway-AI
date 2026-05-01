@@ -2662,6 +2662,117 @@
   const LEGACY_RESUME_KEY = "pathwayai_resumeData";
   const LEGACY_LINKEDIN_BUNDLE = "pathwayai_linkedinData";
   const PRELIM_PREFIX = "pathwayai_prelim_scores__";
+  const MANUAL_PROFILE_KEY = "pathwayai_manualProfile";
+
+  function loadManualProfile() {
+    try {
+      var raw = localStorage.getItem(MANUAL_PROFILE_KEY);
+      if (!raw) return {};
+      var o = JSON.parse(raw);
+      return o && typeof o === "object" ? o : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveManualProfile(patch) {
+    try {
+      var cur = loadManualProfile();
+      Object.assign(cur, patch);
+      localStorage.setItem(MANUAL_PROFILE_KEY, JSON.stringify(cur));
+    } catch (e) {}
+  }
+
+  var _profileReadyCommitLock = false;
+
+  function ensureProfileReadyEditorBindings(summaryEl) {
+    if (!summaryEl || summaryEl.dataset.prManualEditors === "1") return;
+    summaryEl.dataset.prManualEditors = "1";
+    summaryEl.addEventListener("click", function (ev) {
+      var btn = ev.target.closest(".pr-profile-edit-btn");
+      if (!btn || !summaryEl.contains(btn)) return;
+      ev.preventDefault();
+      var field = btn.getAttribute("data-pr-field");
+      if (!field) return;
+      openProfileReadyFieldEditor(summaryEl, field);
+    });
+    summaryEl.addEventListener(
+      "blur",
+      function (ev) {
+        var t = ev.target;
+        if (!t.classList || !t.classList.contains("pr-profile-field-input")) return;
+        if (!summaryEl.contains(t)) return;
+        commitProfileReadyField(summaryEl, t);
+      },
+      true
+    );
+  }
+
+  function openProfileReadyFieldEditor(summaryEl, field) {
+    var body = summaryEl.querySelector('[data-pr-body="' + field + '"]');
+    if (!body) return;
+    var text = "";
+    if (field === "name") {
+      var inp0 = body.querySelector('.pr-profile-field-input[data-pr-field="name"]');
+      if (inp0) {
+        inp0.focus();
+        inp0.select();
+        return;
+      }
+      var dn = body.querySelector(".pr-name");
+      if (dn) text = dn.textContent.trim();
+    } else {
+      var pills = body.querySelectorAll(".skill-pill-mini");
+      if (pills.length) {
+        text = Array.prototype.map.call(pills, function (p) {
+          return p.textContent.trim();
+        }).join("\n");
+      } else {
+        var pl = body.querySelectorAll(".pr-line");
+        if (pl.length) {
+          text = Array.prototype.map.call(pl, function (p) {
+            return p.textContent.trim();
+          }).join("\n");
+        }
+      }
+    }
+    var ta = document.createElement("textarea");
+    ta.className = "pr-profile-field-input";
+    ta.setAttribute("data-pr-field", field);
+    ta.value = text;
+    ta.rows = field === "name" ? 2 : Math.min(10, Math.max(3, text.split("\n").length + 1));
+    ta.style.cssText =
+      "width:100%;min-height:2.5rem;font-size:0.82rem;padding:0.35rem 0.45rem;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);resize:vertical;box-sizing:border-box;";
+    body.innerHTML = "";
+    body.appendChild(ta);
+    ta.focus();
+  }
+
+  function commitProfileReadyField(summaryEl, el) {
+    if (_profileReadyCommitLock) return;
+    var field = el.getAttribute("data-pr-field");
+    if (!field) return;
+    _profileReadyCommitLock = true;
+    try {
+      var patch = {};
+      if (field === "name") {
+        patch.name = (el.value || "").trim();
+      } else {
+        var lines = String(el.value || "")
+          .split(/\r?\n/)
+          .map(function (l) {
+            return l.trim();
+          })
+          .filter(Boolean);
+        patch[field] = lines;
+      }
+      saveManualProfile(patch);
+      renderProfileReady();
+    } finally {
+      _profileReadyCommitLock = false;
+    }
+  }
+
   function _linkedinBundleKey(uid) {
     return "pathwayai_linkedin_bundle__" + String(uid);
   }
@@ -3847,32 +3958,148 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
     return t.slice(0, maxLen - 1) + "…";
   }
 
-  function getResumeOnlySkillSnapshot() {
+  function resolveRawResumeTextForProfile() {
+    try {
+      var lt = localStorage.getItem("pathwayai_resumeText");
+      if (lt && String(lt).trim()) return String(lt);
+    } catch (e0) {}
+    if (state && state.resumeParsed && state.resumeParsed.rawText && String(state.resumeParsed.rawText).trim()) {
+      return String(state.resumeParsed.rawText);
+    }
+    return getResumeTextForGapApi() || "";
+  }
+
+  function readResumeSkillsLowerForSnapshot() {
+    var out = [];
     var parsed = null;
     if (!state._resumePendingChooser) {
       parsed = getActiveResumeParsed();
     }
-    var skills = [];
-    if (parsed && parsed.skills) skills = parsed.skills.map(function (x) { return String(x).toLowerCase(); });
-    if (!skills.length && state.manualSkills && state.manualSkills.length) {
-      skills = state.manualSkills.map(function (x) { return String(x).toLowerCase(); });
-    }
-
-    function score(keys) {
-      var hit = 0;
-      keys.forEach(function (k) {
-        if (skills.join(' ').indexOf(k) !== -1) hit++;
+    if (parsed && parsed.skills && parsed.skills.length) {
+      parsed.skills.forEach(function (x) {
+        out.push(String(x).toLowerCase());
       });
-      return Math.min(92, 35 + hit * 9);
     }
+    try {
+      var rd = localStorage.getItem(LEGACY_RESUME_KEY);
+      if (rd) {
+        var o = JSON.parse(rd);
+        if (o && Array.isArray(o.skills)) {
+          o.skills.forEach(function (x) {
+            var s = String(x == null ? "" : x).toLowerCase().trim();
+            if (s && out.indexOf(s) === -1) out.push(s);
+          });
+        }
+      }
+    } catch (e1) {}
+    if (!out.length && state.manualSkills && state.manualSkills.length) {
+      out = state.manualSkills.map(function (x) { return String(x).toLowerCase(); });
+    }
+    return out;
+  }
 
-    return [
-      { name: "Technical Skills", pct: score(["python","javascript","react","java","docker","aws","sql"]) },
-      { name: "Data Skills", pct: score(["sql","excel","tableau","power bi","statistics","pandas"]) },
-      { name: "Product Skills", pct: score(["product management","roadmap","user research","a/b testing","analytics"]) },
-      { name: "Communication", pct: score(["writing","public speaking","presentation","communication"]) },
-      { name: "Execution", pct: score(["agile","project management","jira","ci/cd"]) }
-    ].sort(function (a,b){ return b.pct - a.pct; }).slice(0,5);
+  function pickRoleSkillDomains(roleStr) {
+    var r = String(roleStr || "").toLowerCase();
+    if (r.indexOf("data scientist") !== -1 || r.indexOf("data science") !== -1) {
+      return ["Machine Learning", "Statistics", "SQL", "Python", "Data Visualization"];
+    }
+    if (r.indexOf("data analyst") !== -1) {
+      return ["SQL", "Excel", "Statistics", "Data Visualization", "Python"];
+    }
+    if (r.indexOf("product manager") !== -1) {
+      return ["Product Strategy", "User Research", "Data Analysis", "Stakeholder Management", "Agile/Scrum"];
+    }
+    if (r.indexOf("software") !== -1 || r.indexOf("engineer") !== -1) {
+      return ["Algorithms", "System Design", "Code Quality", "Testing", "DevOps"];
+    }
+    if (r.indexOf("marketing") !== -1) {
+      return ["SEO/SEM", "Analytics", "Content Strategy", "Paid Acquisition", "CRM"];
+    }
+    if (r.indexOf("finance") !== -1 || r.indexOf("banking") !== -1) {
+      return ["Financial Modeling", "Excel/VBA", "Valuation", "Data Analysis", "Presentation"];
+    }
+    return ["Technical Skills", "Communication", "Problem Solving", "Leadership", "Domain Knowledge"];
+  }
+
+  function resumeEvidenceMatchesDomain(domain, resumeBlob) {
+    var b = resumeBlob.toLowerCase();
+    var d = domain.toLowerCase();
+    if (b.indexOf(d) !== -1) return true;
+    var aliases = {
+      "machine learning": ["ml", "keras", "pytorch", "tensorflow", "nlp"],
+      statistics: ["statistics", "regression", "inference", "r stats"],
+      sql: ["sql", "postgres", "mysql", "sqlite", "tsql"],
+      python: ["python", "pandas", "numpy"],
+      excel: ["excel", "spreadsheet", "vba"],
+      "data visualization": ["tableau", "power bi", "looker", "visualization"],
+      "product strategy": ["roadmap", "strategy", "okr", "prioritization"],
+      "user research": ["user research", "ux research", "interview", "survey"],
+      "data analysis": ["analysis", "analytics", "sql"],
+      "stakeholder management": ["stakeholder", "cross-functional", "communication"],
+      "agile/scrum": ["agile", "scrum", "sprint", "kanban"],
+      algorithms: ["algorithm", "leetcode", "complexity", "dsa"],
+      "system design": ["system design", "architecture", "scalability", "microservice"],
+      "code quality": ["testing", "unit test", "clean code", "review"],
+      testing: ["test", "qa", "jest", "pytest"],
+      devops: ["docker", "kubernetes", "ci/cd", "deploy"],
+      "seo/sem": ["seo", "sem", "ads", "ppc"],
+      analytics: ["google analytics", "mixpanel", "analytics"],
+      "content strategy": ["content", "copy", "editorial"],
+      "paid acquisition": ["paid", "performance marketing", "growth"],
+      crm: ["salesforce", "hubspot", "crm"],
+      "financial modeling": ["model", "dcf", "forecast", "excel model"],
+      "excel/vba": ["excel", "vba", "spreadsheet"],
+      valuation: ["valuation", "dcf", "comps"],
+      presentation: ["powerpoint", "presentation", "deck"],
+      "technical skills": ["technical", "engineering", "software"],
+      communication: ["communication", "writing", "presentation"],
+      "problem solving": ["problem", "analytical"],
+      leadership: ["leadership", "mentor", "manage"],
+      "domain knowledge": ["domain", "industry", "sector"]
+    };
+    var key = d.split("/")[0].trim();
+    var list = aliases[d] || aliases[key];
+    if (list) {
+      for (var i = 0; i < list.length; i++) {
+        if (b.indexOf(list[i]) !== -1) return true;
+      }
+    }
+    var parts = d.split(/\s*\/\s*|\s+/);
+    for (var j = 0; j < parts.length; j++) {
+      var p = parts[j];
+      if (p.length > 2 && b.indexOf(p) !== -1) return true;
+    }
+    return false;
+  }
+
+  function pctRangeForDomain(match) {
+    if (match) {
+      return Math.floor(65 + Math.random() * 21);
+    }
+    return Math.floor(25 + Math.random() * 21);
+  }
+
+  function getResumeOnlySkillSnapshot() {
+    var resumeSkills = readResumeSkillsLowerForSnapshot();
+    var resumeBlob = resumeSkills.join(" ");
+    var rawTxt = resolveRawResumeTextForProfile();
+    if (rawTxt) resumeBlob += " " + String(rawTxt).toLowerCase();
+    var targetRole = state.role || "";
+    try {
+      var lr = localStorage.getItem("pathwayai_role");
+      if (lr && String(lr).trim()) targetRole = String(lr).trim();
+    } catch (e2) {}
+    var domains = pickRoleSkillDomains(targetRole);
+    return domains.map(function (dom) {
+      var match = resumeEvidenceMatchesDomain(dom, resumeBlob);
+      return {
+        name: dom,
+        pct: pctRangeForDomain(match),
+        resumeOnly: true
+      };
+    }).sort(function (a, b) {
+      return b.pct - a.pct;
+    });
   }
 
   function inferResumeDisplayFromText(raw) {
@@ -3892,34 +4119,254 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
     var ph = text.match(/[\+\d][\d\s\-\(\)]{9,}/);
     if (ph) out.phone = ph[0].trim();
 
-    var ni;
-    for (ni = 0; ni < lines.length; ni++) {
-      var nline = lines[ni];
-      if (/[\d@]/.test(nline)) continue;
+    var firstTen = lines.slice(0, 10);
+    var badContactOrLink = /@|http|linkedin|github/i;
+    var sevenPlusDigits = /\d{7,}/;
+    var jobTitleWord = /\b(Engineer|Manager|Developer|Analyst|Designer|Intern)\b/i;
+
+    function looksTitleCaseOrAllCaps(line) {
+      var s = line.trim();
+      if (!s) return false;
+      var alphaOnly = s.replace(/[^A-Za-z]/g, "");
+      if (alphaOnly.length >= 2 && alphaOnly === alphaOnly.toUpperCase()) return true;
+      return /^([A-Z][a-z]+)(\s+[A-Z][a-z]+){1,4}$/.test(s);
+    }
+
+    var wi;
+    for (wi = 0; wi < firstTen.length; wi++) {
+      var nline = firstTen[wi];
       var words = nline.split(/\s+/).filter(Boolean);
-      if (words.length >= 2 && words.length <= 4 && !out.name) {
-        out.name = words.join(" ");
+      if (words.length < 2 || words.length > 5) continue;
+      if (badContactOrLink.test(nline)) continue;
+      if (sevenPlusDigits.test(nline)) continue;
+      if (jobTitleWord.test(nline)) continue;
+      if (!looksTitleCaseOrAllCaps(nline)) continue;
+      out.name = nline.trim();
+      break;
+    }
+
+    function cleanEduLine(line) {
+      var t = String(line || "").replace(/\s+/g, " ").trim();
+      if (t.length > 100) t = t.slice(0, 100);
+      return t;
+    }
+
+    var eduSectionHeaderRe =
+      /^\s*#*\s*(education|academic background|academics|qualifications)\s*:?\s*$/i;
+    var eduSectionStopRe =
+      /^\s*(experience|employment|work history|professional experience|skills|projects?|certifications?)\s*:?\s*$/i;
+    var eduKeywordRe =
+      /university|college|institute|bachelor|master|b\.s\.|b\.a\.|m\.s\.|m\.b\.a\.|ph\.d|gpa|class of|graduated|degree|major|minor/i;
+
+    var eduSectionLines = [];
+    var es;
+    for (es = 0; es < lines.length; es++) {
+      if (eduSectionHeaderRe.test(lines[es])) {
+        var lim = Math.min(es + 1 + 8, lines.length);
+        var eq;
+        for (eq = es + 1; eq < lim; eq++) {
+          var secL = lines[eq];
+          if (!secL) continue;
+          if (eduSectionStopRe.test(secL)) break;
+          eduSectionLines.push(secL);
+          if (eduSectionLines.length >= 8) break;
+        }
+        break;
       }
     }
 
-    var eduKeys = ["University", "College", "Bachelor", "Master", "MBA", "B.Tech", "MS", "BS", "PhD"];
-    var eduRe = new RegExp(eduKeys.join("|"), "i");
+    var eduKeywordLines = [];
     lines.forEach(function (line) {
-      if (eduRe.test(line)) {
-        var cl = clampSummaryLine(line, 96);
-        if (cl && out.educationLines.indexOf(cl) === -1) out.educationLines.push(cl);
-      }
+      if (eduKeywordRe.test(line)) eduKeywordLines.push(line);
     });
-    out.educationLines = out.educationLines.slice(0, 4);
 
-    var expRe = /\b(Analyst|Engineer|Manager|Intern|Developer|Consultant)\b/i;
-    lines.forEach(function (line) {
-      if (expRe.test(line) && line.length > 8 && line.length < 220) {
-        var ex = clampSummaryLine(line, 96);
-        if (ex && out.experienceLines.indexOf(ex) === -1) out.experienceLines.push(ex);
+    var eduMerged = [];
+    var eduSeenNorm = {};
+    function pushEduUnique(arr) {
+      arr.forEach(function (line) {
+        var cl = cleanEduLine(line);
+        if (cl.length < 4) return;
+        var nk = cl.toLowerCase();
+        if (eduSeenNorm[nk]) return;
+        eduSeenNorm[nk] = true;
+        eduMerged.push(cl);
+      });
+    }
+    pushEduUnique(eduSectionLines);
+    pushEduUnique(eduKeywordLines);
+    out.educationLines = eduMerged.slice(0, 3);
+
+    function cleanExpLine(line) {
+      var tx = String(line || "").replace(/\s+/g, " ").trim();
+      if (tx.length > 100) tx = tx.slice(0, 100);
+      return tx;
+    }
+
+    function shouldSkipExperienceLine(cl) {
+      if (!cl || cl.length < 4) return true;
+      var words = cl.split(/\s+/).filter(Boolean);
+      if (words.length < 2) return true;
+      if (/^\s*\d{4}\s*[-–—]\s*\d{4}\s*$/.test(cl)) return true;
+      if (/^\s*\d{4}\s*[-–—]\s*(Present|present)\s*$/.test(cl)) return true;
+      var letters = cl.replace(/[^a-zA-Z]/g, "");
+      if (letters.length < 4 && /\d/.test(cl)) return true;
+      return false;
+    }
+
+    function matchesExperiencePattern(line) {
+      var t = line;
+      if (/\b(2019|2020|2021|2022|2023|2024|2025)\b/.test(t)) return true;
+      if (
+        /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December|Present)\b/i.test(
+          t
+        )
+      ) {
+        return true;
       }
+      if (
+        /\b(intern|engineer|analyst|manager|developer|designer|associate|coordinator|lead|consultant|specialist|director)\b/i.test(
+          t
+        )
+      ) {
+        return true;
+      }
+      if (/\bat\s+\S/.test(t) || /@\s+\S/.test(t)) return true;
+      return false;
+    }
+
+    var expSectionHeaderRe =
+      /^\s*#*\s*(experience|work experience|employment|work history|professional experience)\s*:?\s*$/i;
+    var expSectionStopRe =
+      /^\s*#*\s*(education|academic background|academics|qualifications|skills|technical skills|projects?|certifications?)\s*:?\s*$/i;
+
+    var expSectionLines = [];
+    var xp;
+    for (xp = 0; xp < lines.length; xp++) {
+      if (expSectionHeaderRe.test(lines[xp])) {
+        var expLim = Math.min(xp + 1 + 12, lines.length);
+        var xq;
+        for (xq = xp + 1; xq < expLim; xq++) {
+          var expL = lines[xq];
+          if (!expL) continue;
+          if (expSectionStopRe.test(expL)) break;
+          expSectionLines.push(expL);
+          if (expSectionLines.length >= 12) break;
+        }
+        break;
+      }
+    }
+
+    var expPatternLines = [];
+    lines.forEach(function (line) {
+      if (matchesExperiencePattern(line)) expPatternLines.push(line);
     });
-    out.experienceLines = out.experienceLines.slice(0, 4);
+
+    var expMerged = [];
+    var expSeenNorm = {};
+    function pushExpUnique(arr, requirePattern) {
+      arr.forEach(function (line) {
+        if (requirePattern && !matchesExperiencePattern(line)) return;
+        var cl = cleanExpLine(line);
+        if (shouldSkipExperienceLine(cl)) return;
+        var nk = cl.toLowerCase();
+        if (expSeenNorm[nk]) return;
+        expSeenNorm[nk] = true;
+        expMerged.push(cl);
+      });
+    }
+    pushExpUnique(expSectionLines, false);
+    pushExpUnique(expPatternLines, true);
+    out.experienceLines = expMerged.slice(0, 4);
+
+    function cleanProjLine(line) {
+      var tx = String(line || "").replace(/\s+/g, " ").trim();
+      if (tx.length > 100) tx = tx.slice(0, 100);
+      return tx;
+    }
+
+    function looksLikeProjectTitle(line) {
+      var raw = String(line || "").replace(/^[\-\u2022•\s]+/, "").trim();
+      if (!raw) return false;
+      if (/@|https?:\/\//i.test(raw)) return false;
+      if (/\b[\w.-]+@[\w.-]+\.\w+/.test(raw)) return false;
+      if (sevenPlusDigits.test(raw)) return false;
+      var words = raw.split(/\s+/).filter(Boolean);
+      if (words.length < 3 || words.length > 8) return false;
+      var connectorRe = /^(of|and|the|for|in|to|with|at|via|as|on)$/i;
+      var alphaOk = 0;
+      var i;
+      for (i = 0; i < words.length; i++) {
+        var w = words[i].replace(/^[\('"#]+/, "").replace(/[.,;:)'"]+$/, "");
+        if (!/[A-Za-z]/.test(w)) continue;
+        alphaOk++;
+        if (connectorRe.test(w)) continue;
+        if (/^\d{4}$/.test(w)) continue;
+        if (/^[A-Z]{2,5}$/.test(w) && w.length <= 5) continue;
+        if (/^[A-Z][a-z]+$/.test(w)) continue;
+        return false;
+      }
+      if (alphaOk < 3) return false;
+      if (/\b(university|college|institute|high school)\b/i.test(raw)) return false;
+      if (/\b(inc\.|llc|llp|corp\.|ltd\.)\b/i.test(raw)) return false;
+      return true;
+    }
+
+    function matchesProjectPattern(line) {
+      var t = line;
+      if (/github\.com|\bgithub\b/i.test(t)) return true;
+      if (/built\s+with|\busing\b|\btech\s*:|\bstack\s*:|\btools\s*:/i.test(t)) return true;
+      if (looksLikeProjectTitle(t)) return true;
+      return false;
+    }
+
+    function shouldSkipProjLine(cl) {
+      if (!cl || cl.length < 4) return true;
+      return false;
+    }
+
+    var projSectionHeaderRe =
+      /^\s*#*\s*(projects|personal projects|side projects|academic projects|notable projects|key projects)\s*:?\s*$/i;
+    var projSectionStopRe =
+      /^\s*#*\s*(education|academic background|academics|qualifications|experience|work experience|employment|work history|professional experience|skills|technical skills|certifications?)\s*:?\s*$/i;
+
+    var projSectionLines = [];
+    var pr;
+    for (pr = 0; pr < lines.length; pr++) {
+      if (projSectionHeaderRe.test(lines[pr])) {
+        var projLim = Math.min(pr + 1 + 10, lines.length);
+        var pq;
+        for (pq = pr + 1; pq < projLim; pq++) {
+          var projL = lines[pq];
+          if (!projL) continue;
+          if (projSectionStopRe.test(projL)) break;
+          projSectionLines.push(projL);
+          if (projSectionLines.length >= 10) break;
+        }
+        break;
+      }
+    }
+
+    var projPatternLines = [];
+    lines.forEach(function (line) {
+      if (matchesProjectPattern(line)) projPatternLines.push(line);
+    });
+
+    var projMerged = [];
+    var projSeenNorm = {};
+    function pushProjUnique(arr, requirePattern) {
+      arr.forEach(function (line) {
+        if (requirePattern && !matchesProjectPattern(line)) return;
+        var cl = cleanProjLine(line.replace(/^[\-\u2022•\s]+/, "").trim());
+        if (shouldSkipProjLine(cl)) return;
+        var nk = cl.toLowerCase();
+        if (projSeenNorm[nk]) return;
+        projSeenNorm[nk] = true;
+        projMerged.push(cl);
+      });
+    }
+    pushProjUnique(projSectionLines, false);
+    pushProjUnique(projPatternLines, true);
+    out.projectLines = projMerged.slice(0, 4);
 
     var skillHeader = -1;
     var si;
@@ -3945,24 +4392,15 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
     }
     out.skillItems = out.skillItems.slice(0, 18);
 
-    var projHeader = -1;
-    var pi;
-    for (pi = 0; pi < lines.length; pi++) {
-      if (/^projects?:?$/i.test(lines[pi])) {
-        projHeader = pi + 1;
-        break;
-      }
-    }
-    if (projHeader >= 0) {
-      var pj;
-      for (pj = projHeader; pj < lines.length && pj < projHeader + 10; pj++) {
-        var PL = lines[pj];
-        if (!PL) continue;
-        if (/^(skills|education|experience|employment)/i.test(PL)) break;
-        out.projectLines.push(clampSummaryLine(PL, 96));
-      }
-    }
-    out.projectLines = out.projectLines.slice(0, 6);
+    console.log("=== INFER DEBUG ===");
+    console.log("Raw text length:", text.length);
+    console.log("Raw text preview:", text.slice(0, 600));
+    console.log("Lines found:", lines.length);
+    console.log("Inferred name:", out.name);
+    console.log("Education lines:", out.educationLines);
+    console.log("Experience lines:", out.experienceLines);
+    console.log("Project lines:", out.projectLines);
+    console.log("Skill items:", out.skillItems);
 
     return out;
   }
@@ -3970,6 +4408,11 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
   function renderProfileReady() {
     var s = loadAppState() || {};
     var parsed = state._resumePendingChooser ? null : getActiveResumeParsed();
+
+    console.log("=== PROFILE READY DEBUG ===");
+    console.log("parsed object:", parsed);
+    console.log("rawResumeText from resolveRawResumeTextForProfile:", 
+      resolveRawResumeTextForProfile().slice(0, 400));
 
     var name = (s.manual && s.manual.name) || state.displayName || "there";
     var role = state.role || s.role || "your role";
@@ -3985,13 +4428,20 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
 
     var summary = document.getElementById("profile-ready-summary");
     if (summary) {
-      var rawResumeText = getResumeTextForGapApi();
+      var rawResumeText = resolveRawResumeTextForProfile();
       var inferred = inferResumeDisplayFromText(rawResumeText);
+      console.log('Raw resume text length:', rawResumeText ? rawResumeText.length : 0);
+      var inferredName = inferred.name;
+      var inferredEducation = inferred.educationLines;
+      var inferredExperience = inferred.experienceLines;
+      console.log('Inferred name:', inferredName);
+      console.log('Inferred education:', inferredEducation);
+      console.log('Inferred experience:', inferredExperience);
 
       var displayN = parsed && (parsed.displayName || parsed.name) ? (parsed.displayName || parsed.name) : null;
       if (displayN) displayN = String(displayN).trim().split(/\s+/).slice(0, 6).join(" ");
       else displayN = null;
-      if (!displayN) displayN = (s.manual && s.manual.name) ? String(s.manual.name).trim() : name;
+      if (!displayN && s.manual && s.manual.name) displayN = String(s.manual.name).trim();
       if (!displayN && inferred.name) displayN = inferred.name;
       var em = (parsed && parsed.email) || (state && state.email) || inferred.email || null;
       var ph = parsed && parsed.phone ? parsed.phone : (inferred.phone || null);
@@ -4033,23 +4483,145 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
         expLines = inferred.experienceLines.slice(0, expMax);
       }
 
+      var mp = loadManualProfile();
+      var PROFILE_EMPTY_MSG = "Not found in resume — add it manually";
+      if (Object.prototype.hasOwnProperty.call(mp, "name")) {
+        displayN = mp.name ? String(mp.name).trim() : null;
+      }
+      if (Object.prototype.hasOwnProperty.call(mp, "education")) {
+        var edM = Array.isArray(mp.education) ? mp.education : [];
+        eduLines = edM.slice(0, 4).map(function (x) {
+          return clampSummaryLine(String(x), 96);
+        }).filter(function (L) {
+          return L && L.length;
+        });
+      }
+      if (Object.prototype.hasOwnProperty.call(mp, "experience")) {
+        var exM = Array.isArray(mp.experience) ? mp.experience : [];
+        expLines = exM.slice(0, expMax).map(function (x) {
+          return clampSummaryLine(String(x), 96);
+        }).filter(function (L) {
+          return L && L.length;
+        });
+      }
+
+      var projLinesLi = [];
+      if (parsed && parsed.projects && parsed.projects.length) {
+        projLinesLi = parsed.projects.slice(0, 6).map(function (p) {
+          if (typeof p === "string") return clampSummaryLine(p, 96);
+          return clampSummaryLine([p.title, p.name, p.role, p.description].filter(Boolean).join(" — "), 96);
+        }).filter(function (L) {
+          return L && L.length;
+        });
+      }
+      if (!projLinesLi.length && inferred.projectLines.length) {
+        projLinesLi = inferred.projectLines.slice(0, 4);
+      }
+      if (Object.prototype.hasOwnProperty.call(mp, "projects")) {
+        var pjM = Array.isArray(mp.projects) ? mp.projects : [];
+        projLinesLi = pjM.slice(0, 8).map(function (x) {
+          return clampSummaryLine(String(x), 96);
+        }).filter(function (L) {
+          return L && L.length;
+        });
+      }
+
+      function liSectionHtml(title, fieldKey, innerHtml) {
+        var editBtn =
+          "<button type=\"button\" class=\"btn-ghost pr-profile-edit-btn\" data-pr-field=\"" +
+          fieldKey +
+          "\" style=\"font-size:0.65rem;padding:0.08rem 0.35rem;\">✏️ Edit</button>";
+        return (
+          "<div style=\"display:flex;align-items:baseline;justify-content:space-between;gap:0.35rem;flex-wrap:wrap;margin-bottom:0.25rem;\">" +
+          "<h4 style=\"margin:0;\">" +
+          escapeHtml(title) +
+          "</h4>" +
+          editBtn +
+          "</div>" +
+          '<div data-pr-body="' +
+          fieldKey +
+          '">' +
+          innerHtml +
+          "</div>"
+        );
+      }
+
+      function profileNameHtml(displayName) {
+        var editBtn =
+          "<button type=\"button\" class=\"btn-ghost pr-profile-edit-btn\" data-pr-field=\"name\" style=\"font-size:0.72rem;padding:0.12rem 0.45rem;\">✏️ Edit</button>";
+        var rowOpen =
+          '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.35rem;margin-bottom:0.35rem;">' +
+          '<div data-pr-body="name" style="flex:1;min-width:140px;">';
+        var rowClose = "</div>" + editBtn + "</div>";
+        if (!displayName || !String(displayName).trim()) {
+          return (
+            rowOpen +
+            '<input type="text" class="pr-profile-field-input" data-pr-field="name" placeholder="Enter your name" value="" style="font-size:1.05rem;font-weight:700;width:100%;max-width:320px;padding:0.28rem 0.55rem;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);" />' +
+            rowClose
+          );
+        }
+        return (
+          rowOpen +
+          '<div class="pr-name">' +
+          escapeHtml(String(displayName).trim()) +
+          "</div>" +
+          rowClose
+        );
+      }
+
       function cellLines(lines, emptyLabel) {
-        if (!lines || !lines.length) return "<div class=\"pr-muted\">" + emptyLabel + "</div>";
+        var empty = emptyLabel !== undefined ? emptyLabel : PROFILE_EMPTY_MSG;
+        if (!lines || !lines.length) return "<div class=\"pr-muted\">" + escapeHtml(empty) + "</div>";
         return lines.map(function (line) {
           return "<div class=\"pr-line\">" + escapeHtml(line) + "</div>";
         }).join("");
       }
-      var prLabelChipsLine = function (label, chips) {
+      var prLabelChipsLine = function (label, chips, fieldKey) {
+        var editBtn = fieldKey
+          ? "<button type=\"button\" class=\"btn-ghost pr-profile-edit-btn\" data-pr-field=\"" +
+            fieldKey +
+            "\" style=\"font-size:0.65rem;padding:0.08rem 0.35rem;margin-left:0.25rem;\">✏️ Edit</button>"
+          : "";
+        var labelRow =
+          "<span style=\"display:inline-flex;flex-wrap:wrap;align-items:center;gap:0.25rem;margin-right:0.35rem;\">" +
+          "<span style=\"font-weight:600;\">" +
+          escapeHtml(label) +
+          ":</span>" +
+          editBtn +
+          "</span>";
         if (!chips || !chips.length) {
-          return "<div class=\"pr-chips-line\" style=\"display:flex;flex-wrap:wrap;align-items:baseline;gap:0.3rem 0.35rem;margin:0.1rem 0 0.45rem;\">" +
-            "<span style=\"font-weight:600;\">" + escapeHtml(label) + ":</span> " +
-            "<span class=\"pr-muted\">—</span></div>";
+          if (!fieldKey) {
+            return (
+              "<div class=\"pr-chips-line\" style=\"display:flex;flex-wrap:wrap;align-items:baseline;gap:0.3rem 0.35rem;margin:0.1rem 0 0.45rem;\">" +
+              "<span style=\"font-weight:600;\">" +
+              escapeHtml(label) +
+              ":</span> " +
+              "<span class=\"pr-muted\">—</span></div>"
+            );
+          }
+          return (
+            "<div class=\"pr-chips-line\" style=\"display:flex;flex-wrap:wrap;align-items:baseline;gap:0.3rem 0.35rem;margin:0.1rem 0 0.45rem;\">" +
+            labelRow +
+            '<span data-pr-body="' +
+            fieldKey +
+            '"><span class="pr-muted">' +
+            escapeHtml(PROFILE_EMPTY_MSG) +
+            "</span></span></div>"
+          );
         }
-        return "<div class=\"pr-chips-line\" style=\"display:flex;flex-wrap:wrap;align-items:baseline;gap:0.3rem 0.35rem;margin:0.1rem 0 0.45rem;\">" +
-          "<span style=\"font-weight:600;\">" + escapeHtml(label) + ":</span> " +
-          chips.map(function (c) {
-            return "<span class=\"skill-pill-mini\">" + escapeHtml(clampSummaryLine(String(c), 72)) + "</span>";
-          }).join(" ") + "</div>";
+        return (
+          "<div class=\"pr-chips-line\" style=\"display:flex;flex-wrap:wrap;align-items:baseline;gap:0.3rem 0.35rem;margin:0.1rem 0 0.45rem;\">" +
+          labelRow +
+          '<span data-pr-body="' +
+          (fieldKey || "") +
+          "\" style=\"display:inline-flex;flex-wrap:wrap;gap:0.35rem;align-items:center;\">" +
+          chips
+            .map(function (c) {
+              return "<span class=\"skill-pill-mini\">" + escapeHtml(clampSummaryLine(String(c), 72)) + "</span>";
+            })
+            .join(" ") +
+          "</span></div>"
+        );
       };
 
       var badgeHtml = isLIEx
@@ -4066,7 +4638,9 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
           ? contactParts.join(" · ")
           : "<span class=\"pr-muted\">No headline or location</span>";
 
-        var basicParts = [displayN || "Not detected"];
+        var basicParts = [];
+        if (displayN) basicParts.push(displayN);
+        else basicParts.push("—");
         if (headline) basicParts.push(clampSummaryLine(headline, 100));
         if (loc) basicParts.push(clampSummaryLine(loc, 60));
         var basicBlock = "<div class=\"pr-line\">" + escapeHtml(basicParts.join(" · ")) + "</div>";
@@ -4092,15 +4666,18 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
 
         summary.innerHTML =
           "<div class=\"pr-top\">" +
-          "<div class=\"pr-name\">" + escapeHtml(displayN || "Not detected") + "</div>" +
+          profileNameHtml(displayN) +
           "<div class=\"pr-contact\">" + liContact + "</div>" +
           "<div class=\"pr-meta\">" + badgeHtml + " · Target: " + escapeHtml(String(role)) + "</div>" +
           "</div>" +
           "<div class=\"pr-grid\">" +
           "<div class=\"pr-cell\"><h4>Basic Info</h4>" + basicBlock + "</div>" +
-          "<div class=\"pr-cell\"><h4>Education</h4>" + cellLines(eduLines, "Not detected") + "</div>" +
-          "<div class=\"pr-cell\"><h4>Experience</h4>" + cellLines(expLines, "Not detected") + "</div>" +
+          "<div class=\"pr-cell\">" + liSectionHtml("Education", "education", cellLines(eduLines)) + "</div>" +
+          "<div class=\"pr-cell\">" + liSectionHtml("Experience", "experience", cellLines(expLines)) + "</div>" +
           "<div class=\"pr-cell\"><h4>Skills</h4><div style=\"display:flex;flex-wrap:wrap;gap:0.35rem;align-items:center;\">" + skillsHtmlLi + "</div></div>" +
+          "<div class=\"pr-cell\" style=\"grid-column:1 / -1;\">" +
+          liSectionHtml("Projects", "projects", cellLines(projLinesLi)) +
+          "</div>" +
           "</div>";
       } else {
         var contactHtml = "";
@@ -4140,13 +4717,13 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
           ? parsed.projectChips
           : uniqueChipsForDisplay(projectLinesToChips((parsed && parsed.projects) || [], ""), 28);
         if ((!eduChipsR || !eduChipsR.length) && inferred.educationLines.length) {
-          eduChipsR = inferred.educationLines.slice(0, 8);
+          eduChipsR = inferred.educationLines.slice(0, 2);
         }
         if ((!expChipsR || !expChipsR.length) && inferred.experienceLines.length) {
-          expChipsR = inferred.experienceLines.slice(0, 8);
+          expChipsR = inferred.experienceLines.slice(0, 2);
         }
         if ((!projChipsR || !projChipsR.length) && inferred.projectLines.length) {
-          projChipsR = inferred.projectLines.slice(0, 8);
+          projChipsR = inferred.projectLines.slice(0, 2);
         }
         if ((!skillChipsR || !skillChipsR.length) && inferred.skillItems.length) {
           skillChipsR = inferred.skillItems.slice(0, 14);
@@ -4155,19 +4732,49 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
           ? parsed.certificationChips
           : uniqueChipsForDisplay(certLinesToChips((parsed && parsed.certifications) || []), 16);
 
+        if (Object.prototype.hasOwnProperty.call(mp, "education")) {
+          var edMR = Array.isArray(mp.education) ? mp.education : [];
+          eduChipsR = uniqueChipsForDisplay(
+            edMR.map(function (x) {
+              return clampSummaryLine(String(x), 72);
+            }).filter(Boolean),
+            20
+          );
+        }
+        if (Object.prototype.hasOwnProperty.call(mp, "experience")) {
+          var exMR = Array.isArray(mp.experience) ? mp.experience : [];
+          expChipsR = uniqueChipsForDisplay(
+            exMR.map(function (x) {
+              return clampSummaryLine(String(x), 72);
+            }).filter(Boolean),
+            24
+          );
+        }
+        if (Object.prototype.hasOwnProperty.call(mp, "projects")) {
+          var pjMR = Array.isArray(mp.projects) ? mp.projects : [];
+          projChipsR = uniqueChipsForDisplay(
+            pjMR.map(function (x) {
+              return clampSummaryLine(String(x), 72);
+            }).filter(Boolean),
+            28
+          );
+        }
+
         summary.innerHTML =
           "<div class=\"pr-top\">" +
-          "<div class=\"pr-name\">" + escapeHtml(displayN || "Not detected") + "</div>" +
+          profileNameHtml(displayN) +
           "<div class=\"pr-contact\">" + contactHtml + "</div>" +
           "<div class=\"pr-meta\">" + badgeHtml + " · Target: " + escapeHtml(String(role)) + "</div>" +
           "</div>" +
           "<div class=\"pr-grid\">" +
-          "<div class=\"pr-cell\">" + prLabelChipsLine("Education", eduChipsR) + "</div>" +
-          "<div class=\"pr-cell\">" + prLabelChipsLine("Experience", expChipsR) + "</div>" +
-          "<div class=\"pr-cell\">" + prLabelChipsLine("Projects", projChipsR) + prLabelChipsLine("Certifications", certChipsR) + "</div>" +
+          "<div class=\"pr-cell\">" + prLabelChipsLine("Education", eduChipsR, "education") + "</div>" +
+          "<div class=\"pr-cell\">" + prLabelChipsLine("Experience", expChipsR, "experience") + "</div>" +
+          "<div class=\"pr-cell\">" + prLabelChipsLine("Projects", projChipsR, "projects") + prLabelChipsLine("Certifications", certChipsR) + "</div>" +
           "<div class=\"pr-cell\">" + prLabelChipsLine("Skills", skillChipsR) + "</div>" +
           "</div>";
       }
+
+      ensureProfileReadyEditorBindings(summary);
     }
 
     var roleEl = document.getElementById("profile-ready-role");
