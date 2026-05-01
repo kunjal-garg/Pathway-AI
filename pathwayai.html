@@ -2298,6 +2298,7 @@
       <div class="screen-body" style="max-width:760px;">
         <h2 class="display" style="font-size:1.6rem;margin-bottom:0.5rem;">Your profile is ready.</h2>
         <p style="color:var(--text-muted);margin-bottom:1.25rem;">Here’s what we captured so far. You can refine this later.</p>
+        <p id="profile-ready-ai-loading" style="display:none;margin:0 0 1rem;color:var(--text-muted);font-size:0.9rem;" aria-live="polite">Analyzing your resume with AI...</p>
 
         <div class="profile-ready-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;align-items:start;">
           <div class="stat-card profile-ready-summary-card" style="padding:1.1rem;overflow:hidden;">
@@ -2798,7 +2799,9 @@
         patch[field] = lines;
       }
       saveManualProfile(patch);
-      renderProfileReady();
+      void renderProfileReady().catch(function (e) {
+        console.error(e);
+      });
     } finally {
       _profileReadyCommitLock = false;
     }
@@ -3338,7 +3341,10 @@ function assessmentMatchesSession(c) {
     if (id === "screen-2") syncGoalFormFromState();
     if (id === "screen-3") startScanSequence();
     if (id === "screen-4") syncScreen4ResumePanel();
-    if (id === "screen-4-ready") renderProfileReady();
+    if (id === "screen-4-ready")
+      void renderProfileReady().catch(function (e) {
+        console.error(e);
+      });
     if (id === "screen-5") beginAssessmentSession();
     if (id === "screen-6") renderDashboard();
     if (id === "screen-module") {
@@ -4133,278 +4139,82 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
     });
   }
 
-  function inferResumeDisplayFromText(raw) {
-    var text = String(raw || "");
-    var lines = text.split(/\r?\n/).map(function (l) { return l.trim(); });
-    var bodyLower = text.toLowerCase();
-    var out = {
-      name: null,
-      email: null,
-      phone: null,
-      educationLines: [],
-      experienceLines: [],
-      skillItems: [],
-      projectLines: []
+  async function inferResumeDisplayFromText(raw) {
+    function extractContact(rt) {
+      var text = String(rt || "");
+      var em = text.match(/[\w.-]+@[\w.-]+\.\w+/);
+      var ph = text.match(/[\+\d][\d\s\-\(\)]{9,}/);
+      return {
+        email: em ? em[0] : null,
+        phone: ph ? ph[0].trim() : null
+      };
+    }
+    function withLegacy(base, rt) {
+      var edu = Array.isArray(base.education) ? base.education : [];
+      var exp = Array.isArray(base.experience) ? base.experience : [];
+      var proj = Array.isArray(base.projects) ? base.projects : [];
+      var skills = Array.isArray(base.skills) ? base.skills : [];
+      var c = extractContact(rt);
+      return {
+        name: base.name || "Not detected",
+        education: edu,
+        experience: exp,
+        projects: proj,
+        skills: skills,
+        educationLines: edu.slice(0, 3),
+        experienceLines: exp.slice(0, 4),
+        projectLines: proj.slice(0, 4),
+        skillItems: skills.slice(0, 12),
+        email: c.email,
+        phone: c.phone
+      };
+    }
+    var fallback = {
+      name: "Not detected",
+      education: [],
+      experience: [],
+      projects: [],
+      skills: []
     };
-    var em = text.match(/[\w.-]+@[\w.-]+\.\w+/);
-    if (em) out.email = em[0];
-    var ph = text.match(/[\+\d][\d\s\-\(\)]{9,}/);
-    if (ph) out.phone = ph[0].trim();
 
-    var KNOWN_SKILLS_LIST = [
-      "Python", "SQL", "R", "Java", "JavaScript", "TypeScript", "C++", "Excel", "Tableau", "Power BI",
-      "Pandas", "NumPy", "TensorFlow", "PyTorch", "Spark", "Hadoop", "AWS", "Azure", "GCP",
-      "Docker", "Kubernetes", "Git", "React", "Node", "Django", "Flask", "MongoDB", "PostgreSQL", "MySQL",
-      "Machine Learning", "Deep Learning", "NLP", "Computer Vision", "Statistics", "Data Visualization",
-      "Communication", "Leadership", "Agile", "Scrum"
-    ];
-    var knownSkillLower = {};
-    KNOWN_SKILLS_LIST.forEach(function (k) {
-      knownSkillLower[String(k).toLowerCase()] = k;
-    });
-
-    function inferNameFromLines(L) {
-      var i = 0;
-      while (i < L.length && !String(L[i] || "").trim()) i++;
-      while (i < L.length) {
-        var line = String(L[i] || "").trim();
-        if (!line) {
-          i++;
-          continue;
-        }
-        if (/[|@]/.test(line) || /\d/.test(line)) {
-          i++;
-          continue;
-        }
-        var words = line.split(/\s+/).filter(Boolean);
-        if (words.length < 2 || words.length > 4) {
-          i++;
-          continue;
-        }
-        var allLetters = true;
-        var wk;
-        for (wk = 0; wk < words.length; wk++) {
-          if (!/^[A-Za-z]+$/.test(words[wk])) {
-            allLetters = false;
-            break;
-          }
-        }
-        if (!allLetters) {
-          i++;
-          continue;
-        }
-        return line;
-      }
-      return null;
-    }
-    out.name = inferNameFromLines(lines);
-
-    var eduKeywordRe =
-      /University|College|Institute|School|B\.S\.|B\.A\.|M\.S\.|M\.B\.A\.|Bachelor|Master|Ph\.D|GPA|Major|Degree|EDUCATION/i;
-    var eduCollected = [];
-    var eduSeen = {};
-    var ei;
-    for (ei = 0; ei < lines.length && eduCollected.length < 3; ei++) {
-      var el = String(lines[ei] || "").trim();
-      if (!el || !eduKeywordRe.test(el)) continue;
-      var cleaned = el.replace(/^\s*EDUCATION\s*:?\s*/i, "").replace(/\s+/g, " ").trim();
-      if (cleaned.length < 4) continue;
-      var enk = cleaned.toLowerCase();
-      if (eduSeen[enk]) continue;
-      eduSeen[enk] = true;
-      eduCollected.push(cleaned);
-    }
-    out.educationLines = eduCollected.slice(0, 3);
-
-    function isAllCapsSectionHeader(line) {
-      var s = String(line || "").trim();
-      if (!s || s.length > 48) return false;
-      var words = s.split(/\s+/).filter(Boolean);
-      if (words.length < 1 || words.length > 5) return false;
-      if (/[|@]/.test(s) && s.length > 28) return false;
-      var wv;
-      for (wv = 0; wv < words.length; wv++) {
-        var w = words[wv].replace(/[^A-Za-z]/g, "");
-        if (!w || w.length <= 1) continue;
-        if (w !== w.toUpperCase()) return false;
-      }
-      return words.join(" ").replace(/[^A-Za-z]/g, "").length >= 3;
+    if (!raw || String(raw).trim().length < 50) {
+      return withLegacy(fallback, raw);
     }
 
-    var expStartRe = /^(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT|PROFESSIONAL EXPERIENCE|INTERNSHIP)\s*:?\s*$/i;
-    var dateOrMonthRe =
-      /\b(2019|2020|2021|2022|2023|2024|2025|2026)\b|\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\b/i;
-    var jobWordRe =
-      /\b(Analyst|Engineer|Manager|Developer|Intern|Director|Lead|Consultant|Scientist|Architect|Specialist|Associate|Coordinator)\b/i;
-
-    function lineLooksLikeExperienceEntry(cl) {
-      if (!cl || cl.length < 6) return false;
-      if (expStartRe.test(cl.trim())) return false;
-      if (jobWordRe.test(cl)) return true;
-      if (dateOrMonthRe.test(cl)) return true;
-      return false;
-    }
-
-    var expHdrIdx = -1;
-    var xi;
-    for (xi = 0; xi < lines.length; xi++) {
-      if (expStartRe.test(String(lines[xi] || "").trim())) {
-        expHdrIdx = xi;
-        break;
+    try {
+      var response = await fetch("/api/parse-resume-ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resumeText: raw })
+      });
+      var data = await response.json().catch(function () {
+        return {};
+      });
+      if (!response.ok || data.error) {
+        return withLegacy(fallback, raw);
       }
-    }
-    var expOut = [];
-    if (expHdrIdx !== -1) {
-      var xj;
-      for (xj = expHdrIdx + 1; xj < lines.length && expOut.length < 4; xj++) {
-        var xl = String(lines[xj] || "").trim();
-        if (!xl) continue;
-        if (isAllCapsSectionHeader(xl)) break;
-        if (!lineLooksLikeExperienceEntry(xl)) continue;
-        var exClean = xl.replace(/\s+/g, " ").trim();
-        if (exClean.length > 80) exClean = exClean.slice(0, 80);
-        var nk = exClean.toLowerCase();
-        var dup = false;
-        var eq;
-        for (eq = 0; eq < expOut.length; eq++) {
-          if (expOut[eq].toLowerCase() === nk) {
-            dup = true;
-            break;
-          }
-        }
-        if (!dup) expOut.push(exClean);
+      var text = data.result != null ? String(data.result).trim() : "";
+      if (!text) return withLegacy(fallback, raw);
+      if (text.indexOf("```") === 0) {
+        text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/m, "").trim();
       }
+      var parsed = JSON.parse(text);
+      var base = {
+        name: parsed.name || "Not detected",
+        education: Array.isArray(parsed.education) ? parsed.education : [],
+        experience: Array.isArray(parsed.experience) ? parsed.experience : [],
+        projects: Array.isArray(parsed.projects) ? parsed.projects : [],
+        skills: Array.isArray(parsed.skills) ? parsed.skills : []
+      };
+      return withLegacy(base, raw);
+    } catch (err) {
+      console.error("AI resume parse failed:", err);
+      return withLegacy(fallback, raw);
     }
-    out.experienceLines = expOut;
-
-    var projStartRe = /^(PROJECTS|PERSONAL PROJECTS|ACADEMIC PROJECTS|SELECTED PROJECTS)\s*:?\s*$/i;
-    var projHdrIdx = -1;
-    var pi;
-    for (pi = 0; pi < lines.length; pi++) {
-      if (projStartRe.test(String(lines[pi] || "").trim())) {
-        projHdrIdx = pi;
-        break;
-      }
-    }
-    var projOut = [];
-    if (projHdrIdx !== -1) {
-      var projBlock = [];
-      function flushProjBlock() {
-        if (!projBlock.length || projOut.length >= 4) {
-          projBlock = [];
-          return;
-        }
-        var bi;
-        for (bi = 0; bi < projBlock.length; bi++) {
-          var rawL = projBlock[bi];
-          var pl = String(rawL).replace(/^[\-\u2022•\s]+/, "").trim();
-          if (!pl) continue;
-          if (pl.length > 60) continue;
-          if (pl.split(/\s+/).length > 14) continue;
-          var t80 = pl.length > 80 ? pl.slice(0, 80) : pl;
-          var dupP = false;
-          var pq;
-          for (pq = 0; pq < projOut.length; pq++) {
-            if (projOut[pq].toLowerCase() === t80.toLowerCase()) {
-              dupP = true;
-              break;
-            }
-          }
-          if (!dupP) projOut.push(t80);
-          break;
-        }
-        projBlock = [];
-      }
-      var pj;
-      for (pj = projHdrIdx + 1; pj < lines.length && projOut.length < 4; pj++) {
-        var pln = String(lines[pj] || "").trim();
-        if (!pln) {
-          flushProjBlock();
-          continue;
-        }
-        if (isAllCapsSectionHeader(pln)) break;
-        projBlock.push(lines[pj]);
-      }
-      flushProjBlock();
-    }
-    out.projectLines = projOut.slice(0, 4);
-
-    var skillHdrRe = /^(SKILLS|TECHNICAL SKILLS|CORE SKILLS|KEY SKILLS)\s*:?\s*$/i;
-    var skHdr = -1;
-    var sk;
-    for (sk = 0; sk < lines.length; sk++) {
-      if (skillHdrRe.test(String(lines[sk] || "").trim())) {
-        skHdr = sk;
-        break;
-      }
-    }
-    var skillSeen = {};
-    function addSkillToken(tok) {
-      var t = String(tok || "").replace(/^[\s\-•]+/, "").trim();
-      if (t.length < 2) return;
-      var lk = t.toLowerCase();
-      if (knownSkillLower[lk]) {
-        var canon = knownSkillLower[lk];
-        if (!skillSeen[canon.toLowerCase()]) {
-          skillSeen[canon.toLowerCase()] = true;
-          out.skillItems.push(canon);
-        }
-        return;
-      }
-    }
-    if (skHdr !== -1) {
-      var sl;
-      for (sl = skHdr + 1; sl < lines.length && out.skillItems.length < 12; sl++) {
-        var sline = String(lines[sl] || "").trim();
-        if (!sline) continue;
-        if (skillHdrRe.test(sline) || expStartRe.test(sline) || projStartRe.test(sline)) break;
-        if (isAllCapsSectionHeader(sline) && sline.length < 44) break;
-        if (/^(EDUCATION|EXPERIENCE|PROJECTS|CERTIFICATIONS|AWARDS)\s*:?\s*$/i.test(sline)) break;
-        var parts = sline.split(/[,;|]/).map(function (x) { return x.trim(); }).filter(Boolean);
-        if (parts.length > 1) {
-          parts.forEach(function (p) {
-            addSkillToken(p);
-          });
-        } else {
-          sline.split(/\s+/).forEach(function (w) {
-            addSkillToken(w.replace(/[,.]$/, ""));
-          });
-        }
-      }
-    }
-    var ki;
-    for (ki = 0; ki < KNOWN_SKILLS_LIST.length && out.skillItems.length < 12; ki++) {
-      var klab = KNOWN_SKILLS_LIST[ki];
-      if (skillSeen[klab.toLowerCase()]) continue;
-      if (klab.indexOf(" ") !== -1) {
-        if (bodyLower.indexOf(klab.toLowerCase()) !== -1) {
-          out.skillItems.push(klab);
-          skillSeen[klab.toLowerCase()] = true;
-        }
-      } else {
-        var esc = klab.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        try {
-          if (klab === "C++") {
-            if (/\bC\+\+\b/i.test(text)) {
-              out.skillItems.push("C++");
-              skillSeen["c++"] = true;
-            }
-          } else if (new RegExp("\\b" + esc + "\\b", "i").test(text)) {
-            out.skillItems.push(klab);
-            skillSeen[klab.toLowerCase()] = true;
-          }
-        } catch (e2) {}
-      }
-    }
-    out.skillItems = out.skillItems.slice(0, 12);
-
-    if (!out.name) out.name = "Not detected";
-
-    return out;
   }
 
 
-  function renderProfileReady() {
+  async function renderProfileReady() {
     var s = loadAppState() || {};
     var parsed = state._resumePendingChooser ? null : getActiveResumeParsed();
 
@@ -4426,9 +4236,15 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
     } catch (err) {}
 
     var summary = document.getElementById("profile-ready-summary");
+    var aiLoadEl = document.getElementById("profile-ready-ai-loading");
     if (summary) {
       var rawResumeText = resolveRawResumeTextForProfile();
-      var inferred = inferResumeDisplayFromText(rawResumeText);
+      var showAiLoading = !!(rawResumeText && String(rawResumeText).trim().length >= 50);
+      if (aiLoadEl) {
+        aiLoadEl.style.display = showAiLoading ? "block" : "none";
+      }
+      try {
+        var inferred = await inferResumeDisplayFromText(rawResumeText);
       console.log('Raw resume text length:', rawResumeText ? rawResumeText.length : 0);
       var inferredName = inferred.name;
       var inferredEducation = inferred.educationLines;
@@ -4816,6 +4632,9 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
       }
 
       ensureProfileReadyEditorBindings(summary);
+      } finally {
+        if (aiLoadEl) aiLoadEl.style.display = "none";
+      }
     }
 
     var roleEl = document.getElementById("profile-ready-role");
