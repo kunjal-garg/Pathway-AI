@@ -5,14 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PathwayAI — Career guidance powered by AI</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23534ab7'/%3E%3Ctext x='16' y='22' text-anchor='middle' fill='%23fff' font-family='system-ui,sans-serif' font-size='15' font-weight='800'%3EP%3C/text%3E%3C/svg%3E" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
-  <script>
-    if (typeof pdfjsLib !== 'undefined') {
-      pdfjsLib.GlobalWorkerOptions.workerSrc =
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    }
-  </script>
   <!-- file:// pages cannot reliably load inside editor/preview iframes; HTTP avoids that. -->
   <script>
 (function () {
@@ -1915,7 +1907,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdn.insforge.dev/insforge-js/v2/insforge.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <!-- PDF.js: pdf.min.js + worker configured in <head> (pdfjsLib). -->
+  <!-- PDF.js: loaded at parse time from CDN fallback chain (see parsePDFFile). -->
 </head>
 <body>
   <div class="app">
@@ -2172,8 +2164,8 @@
         <div class="profile-options">
           <div class="profile-card" data-mode="resume" tabindex="0" role="button" aria-pressed="false">
             <h3>📄 Upload Resume</h3>
-            <p>PDF — we’ll extract education, skills, and experience automatically.</p>
-            <div class="drop-zone" id="resume-drop">Drop your PDF here or click to browse</div>
+            <p>PDF or Word doc — we'll extract education, skills, and experience automatically.</p>
+            <div class="drop-zone" id="resume-drop">Drop your PDF or Word file here or click to browse</div>
             <div id="resume-parse-ui" style="margin-top:0.75rem;display:none;align-items:center;gap:0.6rem;color:var(--text-muted);font-size:0.9rem;">
               <div class="spinner" id="resume-parse-spinner" aria-hidden="true" style="width:18px;height:18px;border-width:2px;"></div>
               <span id="resume-parse-status">Reading your resume…</span>
@@ -2185,7 +2177,7 @@
                 <button type="button" class="btn btn-ghost btn-block" id="btn-resume-upload-new">Upload a new one</button>
               </div>
             </div>
-            <input type="file" id="resume-file" accept=".pdf,application/pdf" class="hidden" />
+            <input type="file" id="resume-file" accept=".pdf,.docx" class="hidden" />
           </div>
           <div class="profile-card" data-mode="manual" tabindex="0" role="button" aria-pressed="false">
             <h3>✏️ Fill Manually</h3>
@@ -3026,7 +3018,7 @@
   function resetScreen4ResumeUi() {
     var drop = document.getElementById("resume-drop");
     if (drop) {
-      drop.textContent = "Drop your PDF here or click to browse";
+      drop.textContent = "Drop your PDF or Word file here or click to browse";
     }
     var ui = document.getElementById("resume-parse-ui");
     if (ui) ui.style.display = "none";
@@ -5006,22 +4998,85 @@ function startScanSequence() {
 
   async function parsePDFFile(file) {
     try {
+      // Approach 1: Try loading PDF.js from multiple CDNs
+      const cdns = [
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+        'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js',
+        'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'
+      ];
+
+      if (typeof pdfjsLib === 'undefined') {
+        for (const cdn of cdns) {
+          try {
+            await new Promise((resolve, reject) => {
+              const s = document.createElement('script');
+              s.src = cdn;
+              s.onload = resolve;
+              s.onerror = reject;
+              document.head.appendChild(s);
+            });
+            if (typeof pdfjsLib !== 'undefined') {
+              console.log('PDF.js loaded from:', cdn);
+              break;
+            }
+          } catch (e) {
+            console.warn('CDN failed:', cdn);
+          }
+        }
+      }
+
+      if (typeof pdfjsLib === 'undefined') {
+        console.error('All PDF.js CDNs failed');
+        return null;
+      }
+
+      const workerCdns = [
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+        'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
+        'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+      ];
+      pdfjsLib.GlobalWorkerOptions.workerSrc = workerCdns[0];
+
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       let fullText = '';
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        const pageText = content.items.map(item => item.str).join(' ');
-        fullText += pageText + '\n';
+        fullText += content.items.map(item => item.str).join(' ') + '\n';
       }
-      if (!fullText.trim()) {
-        throw new Error('No text extracted — may be a scanned PDF');
-      }
+
+      if (!fullText.trim()) return null;
       window.resumeText = fullText;
+      console.log('✅ PDF parsed:', fullText.length, 'chars');
       return fullText;
+
     } catch (err) {
       console.error('PDF parse error:', err);
+      return null;
+    }
+  }
+
+  async function parseDocxFile(file) {
+    try {
+      // DOCX is a ZIP — JSZip is already loaded
+      const zip = await JSZip.loadAsync(file);
+      const docFile = zip.file('word/document.xml');
+      if (!docFile) return null;
+      const xml = await docFile.async('string');
+      // Strip XML tags and extract text
+      const text = xml
+        .replace(/<w:br[^>]*>/gi, '\n')
+        .replace(/<w:p[ >][^>]*>/gi, '\n')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!text) return null;
+      window.resumeText = text;
+      console.log('✅ DOCX parsed:', text.length, 'chars');
+      return text;
+    } catch (err) {
+      console.error('DOCX parse error:', err);
       return null;
     }
   }
@@ -5353,7 +5408,16 @@ function startScanSequence() {
   }
 
   async function parsePdfResume(file) {
-    const text = await parsePDFFile(file);
+    if (!file) return null;
+    var name = (file.name || "").toLowerCase();
+    var isPdf = file.type === "application/pdf" || name.endsWith(".pdf");
+    var isDocx =
+      file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      name.endsWith(".docx");
+    var text = null;
+    if (isPdf) text = await parsePDFFile(file);
+    else if (isDocx) text = await parseDocxFile(file);
+    else return null;
     if (!text) return null;
     return parseResumeHeuristics(text);
   }
@@ -5370,7 +5434,7 @@ function startScanSequence() {
       state._resumePendingChooser = false;
       try { sessionStorage.setItem(RESUME_CHOOSER_MUTED_SS, "1"); } catch (e) {}
 
-      // Parse PDF (best-effort) for skill gap analysis
+      // Parse resume file (PDF or DOCX) for skill gap analysis
       (async function () {
         var ui = document.getElementById("resume-parse-ui");
         var status = document.getElementById("resume-parse-status");
@@ -5408,7 +5472,7 @@ function startScanSequence() {
             saveAppState({ displayName: state.displayName });
           }
         } else {
-          if (status) status.textContent = "Could not read this PDF (try a text-based resume).";
+          if (status) status.textContent = "Could not read this file";
         }
       })();
     }
@@ -5467,7 +5531,13 @@ function startScanSequence() {
     e.preventDefault();
     resumeDrop.classList.remove("dragover");
     const f = e.dataTransfer.files && e.dataTransfer.files[0];
-    if (f && f.type === "application/pdf") {
+    if (
+      f &&
+      (f.type === "application/pdf" ||
+        f.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+        /\.pdf$/i.test(f.name || "") ||
+        /\.docx$/i.test(f.name || ""))
+    ) {
       resumeDrop.textContent = "Selected: " + f.name;
     }
   });
@@ -6290,7 +6360,7 @@ function startScanSequence() {
         (parsedOk.displayName && String(parsedOk.displayName).trim())
       ));
       if ((!rf || !rf.files || !rf.files.length) && !hasStoredResume) {
-        alert("Please upload a PDF resume first.");
+        alert("Please upload a PDF or Word resume first.");
         document.getElementById("resume-drop").scrollIntoView({ behavior: "smooth", block: "center" });
         return;
       }
