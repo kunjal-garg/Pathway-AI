@@ -5,6 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PathwayAI — Career guidance powered by AI</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23534ab7'/%3E%3Ctext x='16' y='22' text-anchor='middle' fill='%23fff' font-family='system-ui,sans-serif' font-size='15' font-weight='800'%3EP%3C/text%3E%3C/svg%3E" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+  <script>
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
   <!-- file:// pages cannot reliably load inside editor/preview iframes; HTTP avoids that. -->
   <script>
 (function () {
@@ -1907,7 +1915,7 @@
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdn.insforge.dev/insforge-js/v2/insforge.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <!-- PDF.js: loaded on first parse via import("./vendor/pdf.min.mjs") — see getPdfjsModule in page script. -->
+  <!-- PDF.js: pdf.min.js + worker configured in <head> (pdfjsLib). -->
 </head>
 <body>
   <div class="app">
@@ -4996,47 +5004,26 @@ function startScanSequence() {
     return out;
   }
 
-  var _pdfjsModuleLoad = null;
-  function getPdfjsModule() {
-    if (window.__pdfjsModule) return Promise.resolve(window.__pdfjsModule);
-    if (_pdfjsModuleLoad) return _pdfjsModuleLoad;
-    _pdfjsModuleLoad = (function () {
-      try {
-        var base = (document.getElementsByTagName("base")[0] && document.getElementsByTagName("base")[0].href) || window.location.href;
-        return import(new URL("vendor/pdf.min.mjs", base).href).then(function (m) {
-          try {
-            if (m && m.GlobalWorkerOptions) {
-              m.GlobalWorkerOptions.workerSrc = new URL("vendor/pdf.worker.min.mjs", base).href;
-            }
-          } catch (e) {}
-          window.__pdfjsModule = m;
-          return m;
-        });
-      } catch (e) {
-        return Promise.reject(e);
-      }
-    })();
-    return _pdfjsModuleLoad;
-  }
-
-  async function extractPdfText(file) {
-    if (!file) return "";
-    var pdf = null;
+  async function parsePDFFile(file) {
     try {
-      pdf = await getPdfjsModule();
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const pageText = content.items.map(item => item.str).join(' ');
+        fullText += pageText + '\n';
+      }
+      if (!fullText.trim()) {
+        throw new Error('No text extracted — may be a scanned PDF');
+      }
+      window.resumeText = fullText;
+      return fullText;
     } catch (err) {
-      return "";
+      console.error('PDF parse error:', err);
+      return null;
     }
-    if (!pdf || !pdf.getDocument) return "";
-    const buf = await file.arrayBuffer();
-    const doc = await pdf.getDocument({ data: buf }).promise;
-    var full = "";
-    for (var p = 1; p <= doc.numPages; p++) {
-      const page = await doc.getPage(p);
-      const content = await page.getTextContent();
-      full += "\n" + content.items.map(function (it) { return it.str; }).join(" ");
-    }
-    return full;
   }
 
   var RESUME_HEADER_START_RE = /^\s*(academic background|educational background|work history|work experience|professional experience|personal projects|academic projects|technical skills|core competencies|internship|employment|experience|education|projects?|project|skills?|certifications?|awards?|publications?|summary|objective|profile|references?)(\s*[:#\-._]|\b\s+)/i;
@@ -5366,7 +5353,7 @@ function startScanSequence() {
   }
 
   async function parsePdfResume(file) {
-    const text = await extractPdfText(file);
+    const text = await parsePDFFile(file);
     if (!text) return null;
     return parseResumeHeuristics(text);
   }
