@@ -4276,25 +4276,60 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
         }
         return "";
       }
+
+      var isResumeMode = !isLIEx && state.profileMode === "resume";
+
       var eduLines = [];
-      if (parsed && parsed.education && parsed.education.length) {
-        eduLines = parsed.education.slice(0, 2).map(formatEduItem).filter(function (L) { return L && L.length; });
-      } else if (parsed && parsed.educationDisplay && parsed.educationDisplay.length) {
-        eduLines = parsed.educationDisplay.slice(0, 2).map(function (x) { return clampSummaryLine(String(x), 96); });
-      }
-      if (!eduLines.length && inferred.educationLines.length) {
-        eduLines = inferred.educationLines.slice(0, 2);
+      if (isResumeMode) {
+        if (inferred.educationLines && inferred.educationLines.length) {
+          eduLines = inferred.educationLines.slice(0, 2).map(function (x) {
+            return clampSummaryLine(String(x), 96);
+          }).filter(function (L) { return L && L.length; });
+        }
+        if (!eduLines.length && parsed && parsed.education && parsed.education.length) {
+          eduLines = parsed.education.slice(0, 2).map(formatEduItem).filter(function (L) { return L && L.length; });
+        }
+        if (!eduLines.length && parsed && parsed.educationDisplay && parsed.educationDisplay.length) {
+          eduLines = parsed.educationDisplay.slice(0, 2).map(function (x) { return clampSummaryLine(String(x), 96); });
+        }
+      } else {
+        if (parsed && parsed.education && parsed.education.length) {
+          eduLines = parsed.education.slice(0, 2).map(formatEduItem).filter(function (L) { return L && L.length; });
+        } else if (parsed && parsed.educationDisplay && parsed.educationDisplay.length) {
+          eduLines = parsed.educationDisplay.slice(0, 2).map(function (x) { return clampSummaryLine(String(x), 96); });
+        }
+        if (!eduLines.length && inferred.educationLines.length) {
+          eduLines = inferred.educationLines.slice(0, 2).map(function (x) {
+            return clampSummaryLine(String(x), 96);
+          }).filter(function (L) { return L && L.length; });
+        }
       }
 
       var expMax = isLIEx ? 3 : 2;
       var expLines = [];
-      if (parsed && parsed.experience && parsed.experience.length) {
-        expLines = parsed.experience.slice(0, expMax).map(formatExpItem).filter(function (L) { return L && L.length; });
-      } else if (parsed && parsed.experienceDisplay && parsed.experienceDisplay.length) {
-        expLines = parsed.experienceDisplay.slice(0, expMax).map(function (x) { return clampSummaryLine(String(x), 96); });
-      }
-      if (!expLines.length && inferred.experienceLines.length) {
-        expLines = inferred.experienceLines.slice(0, expMax);
+      if (isResumeMode) {
+        if (inferred.experienceLines && inferred.experienceLines.length) {
+          expLines = inferred.experienceLines.slice(0, expMax).map(function (x) {
+            return clampSummaryLine(String(x), 96);
+          }).filter(function (L) { return L && L.length; });
+        }
+        if (!expLines.length && parsed && parsed.experience && parsed.experience.length) {
+          expLines = parsed.experience.slice(0, expMax).map(formatExpItem).filter(function (L) { return L && L.length; });
+        }
+        if (!expLines.length && parsed && parsed.experienceDisplay && parsed.experienceDisplay.length) {
+          expLines = parsed.experienceDisplay.slice(0, expMax).map(function (x) { return clampSummaryLine(String(x), 96); });
+        }
+      } else {
+        if (parsed && parsed.experience && parsed.experience.length) {
+          expLines = parsed.experience.slice(0, expMax).map(formatExpItem).filter(function (L) { return L && L.length; });
+        } else if (parsed && parsed.experienceDisplay && parsed.experienceDisplay.length) {
+          expLines = parsed.experienceDisplay.slice(0, expMax).map(function (x) { return clampSummaryLine(String(x), 96); });
+        }
+        if (!expLines.length && inferred.experienceLines.length) {
+          expLines = inferred.experienceLines.slice(0, expMax).map(function (x) {
+            return clampSummaryLine(String(x), 96);
+          }).filter(function (L) { return L && L.length; });
+        }
       }
 
       var mp = loadManualProfile();
@@ -4321,16 +4356,34 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
       }
 
       var projLinesLi = [];
-      if (parsed && parsed.projects && parsed.projects.length) {
-        projLinesLi = parsed.projects.slice(0, 6).map(function (p) {
-          if (typeof p === "string") return clampSummaryLine(p, 96);
-          return clampSummaryLine([p.title, p.name, p.role, p.description].filter(Boolean).join(" — "), 96);
-        }).filter(function (L) {
-          return L && L.length;
-        });
-      }
-      if (!projLinesLi.length && inferred.projectLines.length) {
-        projLinesLi = inferred.projectLines.slice(0, 4);
+      if (isResumeMode) {
+        if (inferred.projectLines && inferred.projectLines.length) {
+          projLinesLi = inferred.projectLines.slice(0, 4).map(function (x) {
+            return clampSummaryLine(String(x), 96);
+          }).filter(function (L) { return L && L.length; });
+        }
+        if (!projLinesLi.length && parsed && parsed.projects && parsed.projects.length) {
+          projLinesLi = parsed.projects.slice(0, 6).map(function (p) {
+            if (typeof p === "string") return clampSummaryLine(p, 96);
+            return clampSummaryLine([p.title, p.name, p.role, p.description].filter(Boolean).join(" — "), 96);
+          }).filter(function (L) {
+            return L && L.length;
+          });
+        }
+      } else {
+        if (parsed && parsed.projects && parsed.projects.length) {
+          projLinesLi = parsed.projects.slice(0, 6).map(function (p) {
+            if (typeof p === "string") return clampSummaryLine(p, 96);
+            return clampSummaryLine([p.title, p.name, p.role, p.description].filter(Boolean).join(" — "), 96);
+          }).filter(function (L) {
+            return L && L.length;
+          });
+        }
+        if (!projLinesLi.length && inferred.projectLines.length) {
+          projLinesLi = inferred.projectLines.slice(0, 4).map(function (x) {
+            return clampSummaryLine(String(x), 96);
+          }).filter(function (L) { return L && L.length; });
+        }
       }
       if (Object.prototype.hasOwnProperty.call(mp, "projects")) {
         var pjM = Array.isArray(mp.projects) ? mp.projects : [];
@@ -4342,25 +4395,29 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
       }
 
       if (
-        !isLIEx &&
-        state.profileMode === "resume" &&
+        isResumeMode &&
         !Object.prototype.hasOwnProperty.call(mp, "experience") &&
         inferred.experienceLines.length
       ) {
-        expLines = inferred.experienceLines.slice(0, expMax);
+        expLines = inferred.experienceLines.slice(0, expMax).map(function (x) {
+          return clampSummaryLine(String(x), 96);
+        }).filter(function (L) { return L && L.length; });
       }
       if (
-        !isLIEx &&
-        state.profileMode === "resume" &&
+        isResumeMode &&
         !Object.prototype.hasOwnProperty.call(mp, "projects") &&
         inferred.projectLines.length
       ) {
-        projLinesLi = inferred.projectLines.slice(0, 4);
+        projLinesLi = inferred.projectLines.slice(0, 4).map(function (x) {
+          return clampSummaryLine(String(x), 96);
+        }).filter(function (L) { return L && L.length; });
       }
 
       if (!Object.prototype.hasOwnProperty.call(mp, "name")) {
-        if (!isLIEx && state.profileMode === "resume") {
-          displayN = inferred.name || "Not detected";
+        if (isResumeMode) {
+          if (inferred.name && String(inferred.name).trim() && inferred.name !== "Not detected") {
+            displayN = String(inferred.name).trim().split(/\s+/).slice(0, 6).join(" ");
+          }
         } else if (!displayN || displayN === "there") {
           if (inferred.name) displayN = inferred.name;
         }
@@ -4542,48 +4599,110 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
           });
         }
         var skillChipsR = (parsed && parsed.skillChips && parsed.skillChips.length) ? parsed.skillChips : skillList;
-        var eduChipsR = (parsed && parsed.educationChips && parsed.educationChips.length)
-          ? parsed.educationChips
-          : uniqueChipsForDisplay(
-            educationDisplayToChips((parsed && parsed.educationDisplay) || (parsed && parsed.education) || []),
-            20
-          );
-        var expChipsR = (parsed && parsed.experienceChips && parsed.experienceChips.length)
-          ? parsed.experienceChips
-          : uniqueChipsForDisplay(
-            experienceDisplayToChips((parsed && parsed.experienceDisplay) || (parsed && parsed.experience) || []),
-            24
-          );
-        var projChipsR = (parsed && parsed.projectChips && parsed.projectChips.length)
-          ? parsed.projectChips
-          : uniqueChipsForDisplay(projectLinesToChips((parsed && parsed.projects) || [], ""), 28);
-        if ((!eduChipsR || !eduChipsR.length) && inferred.educationLines.length) {
-          eduChipsR = inferred.educationLines.slice(0, 2);
-        }
-        if ((!expChipsR || !expChipsR.length) && inferred.experienceLines.length) {
-          expChipsR = inferred.experienceLines.slice(0, 2);
-        }
-        if ((!projChipsR || !projChipsR.length) && inferred.projectLines.length) {
-          projChipsR = inferred.projectLines.slice(0, 2);
+        var eduChipsR;
+        var expChipsR;
+        var projChipsR;
+        if (isResumeMode) {
+          eduChipsR =
+            inferred.educationLines && inferred.educationLines.length
+              ? uniqueChipsForDisplay(
+                  inferred.educationLines.slice(0, 3).map(function (x) {
+                    return clampSummaryLine(String(x), 72);
+                  }),
+                  20
+                )
+              : [];
+          if (!eduChipsR || !eduChipsR.length) {
+            eduChipsR = (parsed && parsed.educationChips && parsed.educationChips.length)
+              ? parsed.educationChips
+              : uniqueChipsForDisplay(
+                  educationDisplayToChips((parsed && parsed.educationDisplay) || (parsed && parsed.education) || []),
+                  20
+                );
+          }
+          expChipsR =
+            inferred.experienceLines && inferred.experienceLines.length
+              ? uniqueChipsForDisplay(
+                  inferred.experienceLines.slice(0, 4).map(function (x) {
+                    return clampSummaryLine(String(x), 72);
+                  }),
+                  24
+                )
+              : [];
+          if (!expChipsR || !expChipsR.length) {
+            expChipsR = (parsed && parsed.experienceChips && parsed.experienceChips.length)
+              ? parsed.experienceChips
+              : uniqueChipsForDisplay(
+                  experienceDisplayToChips((parsed && parsed.experienceDisplay) || (parsed && parsed.experience) || []),
+                  24
+                );
+          }
+          projChipsR =
+            inferred.projectLines && inferred.projectLines.length
+              ? uniqueChipsForDisplay(
+                  inferred.projectLines.slice(0, 4).map(function (x) {
+                    return clampSummaryLine(String(x), 72);
+                  }),
+                  28
+                )
+              : [];
+          if (!projChipsR || !projChipsR.length) {
+            projChipsR = (parsed && parsed.projectChips && parsed.projectChips.length)
+              ? parsed.projectChips
+              : uniqueChipsForDisplay(projectLinesToChips((parsed && parsed.projects) || [], ""), 28);
+          }
+        } else {
+          eduChipsR = (parsed && parsed.educationChips && parsed.educationChips.length)
+            ? parsed.educationChips
+            : uniqueChipsForDisplay(
+                educationDisplayToChips((parsed && parsed.educationDisplay) || (parsed && parsed.education) || []),
+                20
+              );
+          expChipsR = (parsed && parsed.experienceChips && parsed.experienceChips.length)
+            ? parsed.experienceChips
+            : uniqueChipsForDisplay(
+                experienceDisplayToChips((parsed && parsed.experienceDisplay) || (parsed && parsed.experience) || []),
+                24
+              );
+          projChipsR = (parsed && parsed.projectChips && parsed.projectChips.length)
+            ? parsed.projectChips
+            : uniqueChipsForDisplay(projectLinesToChips((parsed && parsed.projects) || [], ""), 28);
+          if ((!eduChipsR || !eduChipsR.length) && inferred.educationLines.length) {
+            eduChipsR = inferred.educationLines.slice(0, 2);
+          }
+          if ((!expChipsR || !expChipsR.length) && inferred.experienceLines.length) {
+            expChipsR = inferred.experienceLines.slice(0, 2);
+          }
+          if ((!projChipsR || !projChipsR.length) && inferred.projectLines.length) {
+            projChipsR = inferred.projectLines.slice(0, 2);
+          }
         }
         if ((!skillChipsR || !skillChipsR.length) && inferred.skillItems.length) {
           skillChipsR = inferred.skillItems.slice(0, 14);
         }
         if (
-          !isLIEx &&
-          state.profileMode === "resume" &&
+          isResumeMode &&
           !Object.prototype.hasOwnProperty.call(mp, "experience") &&
           inferred.experienceLines.length
         ) {
-          expChipsR = uniqueChipsForDisplay(inferred.experienceLines.slice(0, 4), 24);
+          expChipsR = uniqueChipsForDisplay(
+            inferred.experienceLines.slice(0, 4).map(function (x) {
+              return clampSummaryLine(String(x), 72);
+            }),
+            24
+          );
         }
         if (
-          !isLIEx &&
-          state.profileMode === "resume" &&
+          isResumeMode &&
           !Object.prototype.hasOwnProperty.call(mp, "projects") &&
           inferred.projectLines.length
         ) {
-          projChipsR = uniqueChipsForDisplay(inferred.projectLines.slice(0, 4), 28);
+          projChipsR = uniqueChipsForDisplay(
+            inferred.projectLines.slice(0, 4).map(function (x) {
+              return clampSummaryLine(String(x), 72);
+            }),
+            28
+          );
         }
         var certChipsR = (parsed && parsed.certificationChips && parsed.certificationChips.length)
           ? parsed.certificationChips

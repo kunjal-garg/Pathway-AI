@@ -76,12 +76,12 @@ export default {
         },
         body: JSON.stringify({
           model: "gpt-4o-mini",
-          max_tokens: 1000,
+          max_tokens: 1200,
           messages: [
             {
               role: "system",
               content:
-                "You are a resume parser. Always respond with raw JSON only. No markdown, no backticks, no explanation.",
+                "You are a resume parser. Always respond with raw JSON only. No markdown, no backticks, no explanation. Never include section header words like EDUCATION, EXPERIENCE, SKILLS, PROJECTS in the values.",
             },
             {
               role: "user",
@@ -89,16 +89,16 @@ export default {
 Return ONLY this exact JSON format, nothing else:
 {
   "name": "Full name or null",
-  "education": ["degree + school + GPA as one string"],
-  "experience": ["Job Title | Company  Date range"],
-  "projects": ["Project name only"],
+  "education": ["MS Business Analytics at SFSU, 2025-2027"],
+  "experience": ["Software Engineer at Google, Jun 2023 - Present"],
+  "projects": ["Project name"],
   "skills": ["Skill1", "Skill2"]
 }
 
 Rules:
-- education: up to 3 entries
-- experience: up to 4 entries, job title + company + dates only, no bullets
-- projects: up to 4 project names only, no descriptions
+- education: up to 3 entries; each value like "MS Business Analytics at SFSU, 2025-2027" (degree at school, years or GPA when known)
+- experience: up to 4 entries; each value like "Software Engineer at Google, Jun 2023 - Present" (title at company, date range), no bullets
+- projects: up to 4 entries; only the project name, nothing else
 - skills: up to 12 top technical skills
 
 Resume:
