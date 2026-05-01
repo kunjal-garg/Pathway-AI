@@ -4996,91 +4996,6 @@ function startScanSequence() {
     return out;
   }
 
-  async function parsePDFFile(file) {
-    try {
-      // Approach 1: Try loading PDF.js from multiple CDNs
-      const cdns = [
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
-        'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js',
-        'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'
-      ];
-
-      if (typeof pdfjsLib === 'undefined') {
-        for (const cdn of cdns) {
-          try {
-            await new Promise((resolve, reject) => {
-              const s = document.createElement('script');
-              s.src = cdn;
-              s.onload = resolve;
-              s.onerror = reject;
-              document.head.appendChild(s);
-            });
-            if (typeof pdfjsLib !== 'undefined') {
-              console.log('PDF.js loaded from:', cdn);
-              break;
-            }
-          } catch (e) {
-            console.warn('CDN failed:', cdn);
-          }
-        }
-      }
-
-      if (typeof pdfjsLib === 'undefined') {
-        console.error('All PDF.js CDNs failed');
-        return null;
-      }
-
-      const workerCdns = [
-        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
-        'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
-        'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
-      ];
-      pdfjsLib.GlobalWorkerOptions.workerSrc = workerCdns[0];
-
-      const arrayBuffer = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      let fullText = '';
-      for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
-        const content = await page.getTextContent();
-        fullText += content.items.map(item => item.str).join(' ') + '\n';
-      }
-
-      if (!fullText.trim()) return null;
-      window.resumeText = fullText;
-      console.log('✅ PDF parsed:', fullText.length, 'chars');
-      return fullText;
-
-    } catch (err) {
-      console.error('PDF parse error:', err);
-      return null;
-    }
-  }
-
-  async function parseDocxFile(file) {
-    try {
-      // DOCX is a ZIP — JSZip is already loaded
-      const zip = await JSZip.loadAsync(file);
-      const docFile = zip.file('word/document.xml');
-      if (!docFile) return null;
-      const xml = await docFile.async('string');
-      // Strip XML tags and extract text
-      const text = xml
-        .replace(/<w:br[^>]*>/gi, '\n')
-        .replace(/<w:p[ >][^>]*>/gi, '\n')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
-      if (!text) return null;
-      window.resumeText = text;
-      console.log('✅ DOCX parsed:', text.length, 'chars');
-      return text;
-    } catch (err) {
-      console.error('DOCX parse error:', err);
-      return null;
-    }
-  }
-
   var RESUME_HEADER_START_RE = /^\s*(academic background|educational background|work history|work experience|professional experience|personal projects|academic projects|technical skills|core competencies|internship|employment|experience|education|projects?|project|skills?|certifications?|awards?|publications?|summary|objective|profile|references?)(\s*[:#\-._]|\b\s+)/i;
   function isResumeSectionHeaderLine(l) {
     if (!l || l.length > 80) return false;
@@ -5407,7 +5322,93 @@ function startScanSequence() {
     };
   }
 
+  async function parsePDFFile(file) {
+    try {
+      // Approach 1: Try loading PDF.js from multiple CDNs
+      const cdns = [
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+        'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js',
+        'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js'
+      ];
+
+      if (typeof pdfjsLib === 'undefined') {
+        for (const cdn of cdns) {
+          try {
+            await new Promise((resolve, reject) => {
+              const s = document.createElement('script');
+              s.src = cdn;
+              s.onload = resolve;
+              s.onerror = reject;
+              document.head.appendChild(s);
+            });
+            if (typeof pdfjsLib !== 'undefined') {
+              console.log('PDF.js loaded from:', cdn);
+              break;
+            }
+          } catch (e) {
+            console.warn('CDN failed:', cdn);
+          }
+        }
+      }
+
+      if (typeof pdfjsLib === 'undefined') {
+        console.error('All PDF.js CDNs failed');
+        return null;
+      }
+
+      const workerCdns = [
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+        'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js',
+        'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+      ];
+      pdfjsLib.GlobalWorkerOptions.workerSrc = workerCdns[0];
+
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let fullText = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        fullText += content.items.map(item => item.str).join(' ') + '\n';
+      }
+
+      if (!fullText.trim()) return null;
+      window.resumeText = fullText;
+      console.log('✅ PDF parsed:', fullText.length, 'chars');
+      return fullText;
+
+    } catch (err) {
+      console.error('PDF parse error:', err);
+      return null;
+    }
+  }
+
+  async function parseDocxFile(file) {
+    try {
+      // DOCX is a ZIP — JSZip is already loaded
+      const zip = await JSZip.loadAsync(file);
+      const docFile = zip.file('word/document.xml');
+      if (!docFile) return null;
+      const xml = await docFile.async('string');
+      // Strip XML tags and extract text
+      const text = xml
+        .replace(/<w:br[^>]*>/gi, '\n')
+        .replace(/<w:p[ >][^>]*>/gi, '\n')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!text) return null;
+      window.resumeText = text;
+      console.log('✅ DOCX parsed:', text.length, 'chars');
+      return text;
+    } catch (err) {
+      console.error('DOCX parse error:', err);
+      return null;
+    }
+  }
+
   async function parsePdfResume(file) {
+    console.log('parsePdfResume called with:', file?.name, file?.type);
     if (!file) return null;
     var name = (file.name || "").toLowerCase();
     var isPdf = file.type === "application/pdf" || name.endsWith(".pdf");
@@ -5425,8 +5426,18 @@ function startScanSequence() {
   const resumeDrop = document.getElementById("resume-drop");
   const resumeFile = document.getElementById("resume-file");
 
-  resumeDrop.addEventListener("click", function () { resumeFile.click(); });
+  resumeDrop.addEventListener("click", function (e) {
+    e.stopPropagation();
+    resumeFile.click();
+  });
   resumeFile.addEventListener("change", function () {
+    var file = resumeFile.files && resumeFile.files[0];
+    console.log('🔥 FILE INPUT FIRED');
+    console.log('File name:', file?.name);
+    console.log('File type:', file?.type);
+    console.log('JSZip available:', typeof JSZip);
+    console.log('parseDocxFile available:', typeof parseDocxFile);
+    console.log('parsePDFFile available:', typeof parsePDFFile);
     if (resumeFile.files && resumeFile.files[0]) {
       var f0 = resumeFile.files[0];
       resumeDrop.textContent = "Selected: " + f0.name;
