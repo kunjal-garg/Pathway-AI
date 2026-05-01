@@ -4135,7 +4135,8 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
 
   function inferResumeDisplayFromText(raw) {
     var text = String(raw || "");
-    var lines = text.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(function (l) { return l.length; });
+    var lines = text.split(/\r?\n/).map(function (l) { return l.trim(); });
+    var bodyLower = text.toLowerCase();
     var out = {
       name: null,
       email: null,
@@ -4150,291 +4151,258 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
     var ph = text.match(/[\+\d][\d\s\-\(\)]{9,}/);
     if (ph) out.phone = ph[0].trim();
 
-    var firstTen = lines.slice(0, 10);
-    var badContactOrLink = /@|http|linkedin|github/i;
-    var sevenPlusDigits = /\d{7,}/;
-    var jobTitleWord = /\b(Engineer|Manager|Developer|Analyst|Designer|Intern)\b/i;
-
-    function looksTitleCaseOrAllCaps(line) {
-      var s = line.trim();
-      if (!s) return false;
-      var alphaOnly = s.replace(/[^A-Za-z]/g, "");
-      if (alphaOnly.length >= 2 && alphaOnly === alphaOnly.toUpperCase()) return true;
-      return /^([A-Z][a-z]+)(\s+[A-Z][a-z]+){1,4}$/.test(s);
-    }
-
-    var wi;
-    for (wi = 0; wi < firstTen.length; wi++) {
-      var nline = firstTen[wi];
-      var words = nline.split(/\s+/).filter(Boolean);
-      if (words.length < 2 || words.length > 5) continue;
-      if (badContactOrLink.test(nline)) continue;
-      if (sevenPlusDigits.test(nline)) continue;
-      if (jobTitleWord.test(nline)) continue;
-      if (!looksTitleCaseOrAllCaps(nline)) continue;
-      out.name = nline.trim();
-      break;
-    }
-
-    function cleanEduLine(line) {
-      var t = String(line || "").replace(/\s+/g, " ").trim();
-      if (t.length > 100) t = t.slice(0, 100);
-      return t;
-    }
-
-    var eduSectionHeaderRe =
-      /^\s*#*\s*(education|academic background|academics|qualifications)\s*:?\s*$/i;
-    var eduSectionStopRe =
-      /^\s*(experience|employment|work history|professional experience|skills|projects?|certifications?)\s*:?\s*$/i;
-    var eduKeywordRe =
-      /university|college|institute|bachelor|master|b\.s\.|b\.a\.|m\.s\.|m\.b\.a\.|ph\.d|gpa|class of|graduated|degree|major|minor/i;
-
-    var eduSectionLines = [];
-    var es;
-    for (es = 0; es < lines.length; es++) {
-      if (eduSectionHeaderRe.test(lines[es])) {
-        var lim = Math.min(es + 1 + 8, lines.length);
-        var eq;
-        for (eq = es + 1; eq < lim; eq++) {
-          var secL = lines[eq];
-          if (!secL) continue;
-          if (eduSectionStopRe.test(secL)) break;
-          eduSectionLines.push(secL);
-          if (eduSectionLines.length >= 8) break;
-        }
-        break;
-      }
-    }
-
-    var eduKeywordLines = [];
-    lines.forEach(function (line) {
-      if (eduKeywordRe.test(line)) eduKeywordLines.push(line);
+    var KNOWN_SKILLS_LIST = [
+      "Python", "SQL", "R", "Java", "JavaScript", "TypeScript", "C++", "Excel", "Tableau", "Power BI",
+      "Pandas", "NumPy", "TensorFlow", "PyTorch", "Spark", "Hadoop", "AWS", "Azure", "GCP",
+      "Docker", "Kubernetes", "Git", "React", "Node", "Django", "Flask", "MongoDB", "PostgreSQL", "MySQL",
+      "Machine Learning", "Deep Learning", "NLP", "Computer Vision", "Statistics", "Data Visualization",
+      "Communication", "Leadership", "Agile", "Scrum"
+    ];
+    var knownSkillLower = {};
+    KNOWN_SKILLS_LIST.forEach(function (k) {
+      knownSkillLower[String(k).toLowerCase()] = k;
     });
 
-    var eduMerged = [];
-    var eduSeenNorm = {};
-    function pushEduUnique(arr) {
-      arr.forEach(function (line) {
-        var cl = cleanEduLine(line);
-        if (cl.length < 4) return;
-        var nk = cl.toLowerCase();
-        if (eduSeenNorm[nk]) return;
-        eduSeenNorm[nk] = true;
-        eduMerged.push(cl);
-      });
-    }
-    pushEduUnique(eduSectionLines);
-    pushEduUnique(eduKeywordLines);
-    out.educationLines = eduMerged.slice(0, 3);
-
-    function cleanExpLine(line) {
-      var tx = String(line || "").replace(/\s+/g, " ").trim();
-      if (tx.length > 100) tx = tx.slice(0, 100);
-      return tx;
-    }
-
-    function shouldSkipExperienceLine(cl) {
-      if (!cl || cl.length < 4) return true;
-      var words = cl.split(/\s+/).filter(Boolean);
-      if (words.length < 2) return true;
-      if (/^\s*\d{4}\s*[-–—]\s*\d{4}\s*$/.test(cl)) return true;
-      if (/^\s*\d{4}\s*[-–—]\s*(Present|present)\s*$/.test(cl)) return true;
-      var letters = cl.replace(/[^a-zA-Z]/g, "");
-      if (letters.length < 4 && /\d/.test(cl)) return true;
-      return false;
-    }
-
-    function matchesExperiencePattern(line) {
-      var t = line;
-      if (/\b(2019|2020|2021|2022|2023|2024|2025)\b/.test(t)) return true;
-      if (
-        /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December|Present)\b/i.test(
-          t
-        )
-      ) {
-        return true;
-      }
-      if (
-        /\b(intern|engineer|analyst|manager|developer|designer|associate|coordinator|lead|consultant|specialist|director)\b/i.test(
-          t
-        )
-      ) {
-        return true;
-      }
-      if (/\bat\s+\S/.test(t) || /@\s+\S/.test(t)) return true;
-      return false;
-    }
-
-    var expSectionHeaderRe =
-      /^\s*#*\s*(experience|work experience|employment|work history|professional experience)\s*:?\s*$/i;
-    var expSectionStopRe =
-      /^\s*#*\s*(education|academic background|academics|qualifications|skills|technical skills|projects?|certifications?)\s*:?\s*$/i;
-
-    var expSectionLines = [];
-    var xp;
-    for (xp = 0; xp < lines.length; xp++) {
-      if (expSectionHeaderRe.test(lines[xp])) {
-        var expLim = Math.min(xp + 1 + 12, lines.length);
-        var xq;
-        for (xq = xp + 1; xq < expLim; xq++) {
-          var expL = lines[xq];
-          if (!expL) continue;
-          if (expSectionStopRe.test(expL)) break;
-          expSectionLines.push(expL);
-          if (expSectionLines.length >= 12) break;
+    function inferNameFromLines(L) {
+      var i = 0;
+      while (i < L.length && !String(L[i] || "").trim()) i++;
+      while (i < L.length) {
+        var line = String(L[i] || "").trim();
+        if (!line) {
+          i++;
+          continue;
         }
-        break;
-      }
-    }
-
-    var expPatternLines = [];
-    lines.forEach(function (line) {
-      if (matchesExperiencePattern(line)) expPatternLines.push(line);
-    });
-
-    var expMerged = [];
-    var expSeenNorm = {};
-    function pushExpUnique(arr, requirePattern) {
-      arr.forEach(function (line) {
-        if (requirePattern && !matchesExperiencePattern(line)) return;
-        var cl = cleanExpLine(line);
-        if (shouldSkipExperienceLine(cl)) return;
-        var nk = cl.toLowerCase();
-        if (expSeenNorm[nk]) return;
-        expSeenNorm[nk] = true;
-        expMerged.push(cl);
-      });
-    }
-    pushExpUnique(expSectionLines, false);
-    pushExpUnique(expPatternLines, true);
-    out.experienceLines = expMerged.slice(0, 4);
-
-    function cleanProjLine(line) {
-      var tx = String(line || "").replace(/\s+/g, " ").trim();
-      if (tx.length > 100) tx = tx.slice(0, 100);
-      return tx;
-    }
-
-    function looksLikeProjectTitle(line) {
-      var raw = String(line || "").replace(/^[\-\u2022•\s]+/, "").trim();
-      if (!raw) return false;
-      if (/@|https?:\/\//i.test(raw)) return false;
-      if (/\b[\w.-]+@[\w.-]+\.\w+/.test(raw)) return false;
-      if (sevenPlusDigits.test(raw)) return false;
-      var words = raw.split(/\s+/).filter(Boolean);
-      if (words.length < 3 || words.length > 8) return false;
-      var connectorRe = /^(of|and|the|for|in|to|with|at|via|as|on)$/i;
-      var alphaOk = 0;
-      var i;
-      for (i = 0; i < words.length; i++) {
-        var w = words[i].replace(/^[\('"#]+/, "").replace(/[.,;:)'"]+$/, "");
-        if (!/[A-Za-z]/.test(w)) continue;
-        alphaOk++;
-        if (connectorRe.test(w)) continue;
-        if (/^\d{4}$/.test(w)) continue;
-        if (/^[A-Z]{2,5}$/.test(w) && w.length <= 5) continue;
-        if (/^[A-Z][a-z]+$/.test(w)) continue;
-        return false;
-      }
-      if (alphaOk < 3) return false;
-      if (/\b(university|college|institute|high school)\b/i.test(raw)) return false;
-      if (/\b(inc\.|llc|llp|corp\.|ltd\.)\b/i.test(raw)) return false;
-      return true;
-    }
-
-    function matchesProjectPattern(line) {
-      var t = line;
-      if (/github\.com|\bgithub\b/i.test(t)) return true;
-      if (/built\s+with|\busing\b|\btech\s*:|\bstack\s*:|\btools\s*:/i.test(t)) return true;
-      if (looksLikeProjectTitle(t)) return true;
-      return false;
-    }
-
-    function shouldSkipProjLine(cl) {
-      if (!cl || cl.length < 4) return true;
-      return false;
-    }
-
-    var projSectionHeaderRe =
-      /^\s*#*\s*(projects|personal projects|side projects|academic projects|notable projects|key projects)\s*:?\s*$/i;
-    var projSectionStopRe =
-      /^\s*#*\s*(education|academic background|academics|qualifications|experience|work experience|employment|work history|professional experience|skills|technical skills|certifications?)\s*:?\s*$/i;
-
-    var projSectionLines = [];
-    var pr;
-    for (pr = 0; pr < lines.length; pr++) {
-      if (projSectionHeaderRe.test(lines[pr])) {
-        var projLim = Math.min(pr + 1 + 10, lines.length);
-        var pq;
-        for (pq = pr + 1; pq < projLim; pq++) {
-          var projL = lines[pq];
-          if (!projL) continue;
-          if (projSectionStopRe.test(projL)) break;
-          projSectionLines.push(projL);
-          if (projSectionLines.length >= 10) break;
+        if (/[|@]/.test(line) || /\d/.test(line)) {
+          i++;
+          continue;
         }
-        break;
-      }
-    }
-
-    var projPatternLines = [];
-    lines.forEach(function (line) {
-      if (matchesProjectPattern(line)) projPatternLines.push(line);
-    });
-
-    var projMerged = [];
-    var projSeenNorm = {};
-    function pushProjUnique(arr, requirePattern) {
-      arr.forEach(function (line) {
-        if (requirePattern && !matchesProjectPattern(line)) return;
-        var cl = cleanProjLine(line.replace(/^[\-\u2022•\s]+/, "").trim());
-        if (shouldSkipProjLine(cl)) return;
-        var nk = cl.toLowerCase();
-        if (projSeenNorm[nk]) return;
-        projSeenNorm[nk] = true;
-        projMerged.push(cl);
-      });
-    }
-    pushProjUnique(projSectionLines, false);
-    pushProjUnique(projPatternLines, true);
-    out.projectLines = projMerged.slice(0, 4);
-
-    var skillHeader = -1;
-    var si;
-    for (si = 0; si < lines.length; si++) {
-      if (/^(technical )?skills:?$/i.test(lines[si])) {
-        skillHeader = si + 1;
-        break;
-      }
-    }
-    if (skillHeader >= 0) {
-      var sj;
-      for (sj = skillHeader; sj < lines.length && sj < skillHeader + 20; sj++) {
-        var L = lines[sj];
-        if (!L) continue;
-        if (/^(education|experience|employment|work history|projects?|certifications?)/i.test(L)) break;
-        L.split(/[,;•\-\u2022|]/).forEach(function (piece) {
-          var p = piece.replace(/^[\s\-•]+/, "").trim();
-          if (p.length > 1 && p.length < 72 && out.skillItems.indexOf(p) === -1) {
-            out.skillItems.push(titleCase(p.toLowerCase()));
+        var words = line.split(/\s+/).filter(Boolean);
+        if (words.length < 2 || words.length > 4) {
+          i++;
+          continue;
+        }
+        var allLetters = true;
+        var wk;
+        for (wk = 0; wk < words.length; wk++) {
+          if (!/^[A-Za-z]+$/.test(words[wk])) {
+            allLetters = false;
+            break;
           }
-        });
+        }
+        if (!allLetters) {
+          i++;
+          continue;
+        }
+        return line;
+      }
+      return null;
+    }
+    out.name = inferNameFromLines(lines);
+
+    var eduKeywordRe =
+      /University|College|Institute|School|B\.S\.|B\.A\.|M\.S\.|M\.B\.A\.|Bachelor|Master|Ph\.D|GPA|Major|Degree|EDUCATION/i;
+    var eduCollected = [];
+    var eduSeen = {};
+    var ei;
+    for (ei = 0; ei < lines.length && eduCollected.length < 3; ei++) {
+      var el = String(lines[ei] || "").trim();
+      if (!el || !eduKeywordRe.test(el)) continue;
+      var cleaned = el.replace(/^\s*EDUCATION\s*:?\s*/i, "").replace(/\s+/g, " ").trim();
+      if (cleaned.length < 4) continue;
+      var enk = cleaned.toLowerCase();
+      if (eduSeen[enk]) continue;
+      eduSeen[enk] = true;
+      eduCollected.push(cleaned);
+    }
+    out.educationLines = eduCollected.slice(0, 3);
+
+    function isAllCapsSectionHeader(line) {
+      var s = String(line || "").trim();
+      if (!s || s.length > 48) return false;
+      var words = s.split(/\s+/).filter(Boolean);
+      if (words.length < 1 || words.length > 5) return false;
+      if (/[|@]/.test(s) && s.length > 28) return false;
+      var wv;
+      for (wv = 0; wv < words.length; wv++) {
+        var w = words[wv].replace(/[^A-Za-z]/g, "");
+        if (!w || w.length <= 1) continue;
+        if (w !== w.toUpperCase()) return false;
+      }
+      return words.join(" ").replace(/[^A-Za-z]/g, "").length >= 3;
+    }
+
+    var expStartRe = /^(EXPERIENCE|WORK EXPERIENCE|EMPLOYMENT|PROFESSIONAL EXPERIENCE|INTERNSHIP)\s*:?\s*$/i;
+    var dateOrMonthRe =
+      /\b(2019|2020|2021|2022|2023|2024|2025|2026)\b|\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\b/i;
+    var jobWordRe =
+      /\b(Analyst|Engineer|Manager|Developer|Intern|Director|Lead|Consultant|Scientist|Architect|Specialist|Associate|Coordinator)\b/i;
+
+    function lineLooksLikeExperienceEntry(cl) {
+      if (!cl || cl.length < 6) return false;
+      if (expStartRe.test(cl.trim())) return false;
+      if (jobWordRe.test(cl)) return true;
+      if (dateOrMonthRe.test(cl)) return true;
+      return false;
+    }
+
+    var expHdrIdx = -1;
+    var xi;
+    for (xi = 0; xi < lines.length; xi++) {
+      if (expStartRe.test(String(lines[xi] || "").trim())) {
+        expHdrIdx = xi;
+        break;
       }
     }
-    out.skillItems = out.skillItems.slice(0, 18);
+    var expOut = [];
+    if (expHdrIdx !== -1) {
+      var xj;
+      for (xj = expHdrIdx + 1; xj < lines.length && expOut.length < 4; xj++) {
+        var xl = String(lines[xj] || "").trim();
+        if (!xl) continue;
+        if (isAllCapsSectionHeader(xl)) break;
+        if (!lineLooksLikeExperienceEntry(xl)) continue;
+        var exClean = xl.replace(/\s+/g, " ").trim();
+        if (exClean.length > 80) exClean = exClean.slice(0, 80);
+        var nk = exClean.toLowerCase();
+        var dup = false;
+        var eq;
+        for (eq = 0; eq < expOut.length; eq++) {
+          if (expOut[eq].toLowerCase() === nk) {
+            dup = true;
+            break;
+          }
+        }
+        if (!dup) expOut.push(exClean);
+      }
+    }
+    out.experienceLines = expOut;
 
-    console.log("=== INFER DEBUG ===");
-    console.log("Raw text length:", text.length);
-    console.log("Raw text preview:", text.slice(0, 600));
-    console.log("Lines found:", lines.length);
-    console.log("Inferred name:", out.name);
-    console.log("Education lines:", out.educationLines);
-    console.log("Experience lines:", out.experienceLines);
-    console.log("Project lines:", out.projectLines);
-    console.log("Skill items:", out.skillItems);
+    var projStartRe = /^(PROJECTS|PERSONAL PROJECTS|ACADEMIC PROJECTS|SELECTED PROJECTS)\s*:?\s*$/i;
+    var projHdrIdx = -1;
+    var pi;
+    for (pi = 0; pi < lines.length; pi++) {
+      if (projStartRe.test(String(lines[pi] || "").trim())) {
+        projHdrIdx = pi;
+        break;
+      }
+    }
+    var projOut = [];
+    if (projHdrIdx !== -1) {
+      var projBlock = [];
+      function flushProjBlock() {
+        if (!projBlock.length || projOut.length >= 4) {
+          projBlock = [];
+          return;
+        }
+        var bi;
+        for (bi = 0; bi < projBlock.length; bi++) {
+          var rawL = projBlock[bi];
+          var pl = String(rawL).replace(/^[\-\u2022•\s]+/, "").trim();
+          if (!pl) continue;
+          if (pl.length > 60) continue;
+          if (pl.split(/\s+/).length > 14) continue;
+          var t80 = pl.length > 80 ? pl.slice(0, 80) : pl;
+          var dupP = false;
+          var pq;
+          for (pq = 0; pq < projOut.length; pq++) {
+            if (projOut[pq].toLowerCase() === t80.toLowerCase()) {
+              dupP = true;
+              break;
+            }
+          }
+          if (!dupP) projOut.push(t80);
+          break;
+        }
+        projBlock = [];
+      }
+      var pj;
+      for (pj = projHdrIdx + 1; pj < lines.length && projOut.length < 4; pj++) {
+        var pln = String(lines[pj] || "").trim();
+        if (!pln) {
+          flushProjBlock();
+          continue;
+        }
+        if (isAllCapsSectionHeader(pln)) break;
+        projBlock.push(lines[pj]);
+      }
+      flushProjBlock();
+    }
+    out.projectLines = projOut.slice(0, 4);
+
+    var skillHdrRe = /^(SKILLS|TECHNICAL SKILLS|CORE SKILLS|KEY SKILLS)\s*:?\s*$/i;
+    var skHdr = -1;
+    var sk;
+    for (sk = 0; sk < lines.length; sk++) {
+      if (skillHdrRe.test(String(lines[sk] || "").trim())) {
+        skHdr = sk;
+        break;
+      }
+    }
+    var skillSeen = {};
+    function addSkillToken(tok) {
+      var t = String(tok || "").replace(/^[\s\-•]+/, "").trim();
+      if (t.length < 2) return;
+      var lk = t.toLowerCase();
+      if (knownSkillLower[lk]) {
+        var canon = knownSkillLower[lk];
+        if (!skillSeen[canon.toLowerCase()]) {
+          skillSeen[canon.toLowerCase()] = true;
+          out.skillItems.push(canon);
+        }
+        return;
+      }
+    }
+    if (skHdr !== -1) {
+      var sl;
+      for (sl = skHdr + 1; sl < lines.length && out.skillItems.length < 12; sl++) {
+        var sline = String(lines[sl] || "").trim();
+        if (!sline) continue;
+        if (skillHdrRe.test(sline) || expStartRe.test(sline) || projStartRe.test(sline)) break;
+        if (isAllCapsSectionHeader(sline) && sline.length < 44) break;
+        if (/^(EDUCATION|EXPERIENCE|PROJECTS|CERTIFICATIONS|AWARDS)\s*:?\s*$/i.test(sline)) break;
+        var parts = sline.split(/[,;|]/).map(function (x) { return x.trim(); }).filter(Boolean);
+        if (parts.length > 1) {
+          parts.forEach(function (p) {
+            addSkillToken(p);
+          });
+        } else {
+          sline.split(/\s+/).forEach(function (w) {
+            addSkillToken(w.replace(/[,.]$/, ""));
+          });
+        }
+      }
+    }
+    var ki;
+    for (ki = 0; ki < KNOWN_SKILLS_LIST.length && out.skillItems.length < 12; ki++) {
+      var klab = KNOWN_SKILLS_LIST[ki];
+      if (skillSeen[klab.toLowerCase()]) continue;
+      if (klab.indexOf(" ") !== -1) {
+        if (bodyLower.indexOf(klab.toLowerCase()) !== -1) {
+          out.skillItems.push(klab);
+          skillSeen[klab.toLowerCase()] = true;
+        }
+      } else {
+        var esc = klab.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        try {
+          if (klab === "C++") {
+            if (/\bC\+\+\b/i.test(text)) {
+              out.skillItems.push("C++");
+              skillSeen["c++"] = true;
+            }
+          } else if (new RegExp("\\b" + esc + "\\b", "i").test(text)) {
+            out.skillItems.push(klab);
+            skillSeen[klab.toLowerCase()] = true;
+          }
+        } catch (e2) {}
+      }
+    }
+    out.skillItems = out.skillItems.slice(0, 12);
+
+    if (!out.name) out.name = "Not detected";
 
     return out;
   }
+
 
   function renderProfileReady() {
     var s = loadAppState() || {};
@@ -4473,7 +4441,6 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
       if (displayN) displayN = String(displayN).trim().split(/\s+/).slice(0, 6).join(" ");
       else displayN = null;
       if (!displayN && s.manual && s.manual.name) displayN = String(s.manual.name).trim();
-      if (!displayN && inferred.name) displayN = inferred.name;
       var em = (parsed && parsed.email) || (state && state.email) || inferred.email || null;
       var ph = parsed && parsed.phone ? parsed.phone : (inferred.phone || null);
 
@@ -4516,6 +4483,7 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
 
       var mp = loadManualProfile();
       var PROFILE_EMPTY_MSG = "Not found in resume — add it manually";
+      var EXP_OR_PROJ_EMPTY_MSG = "None detected — add manually later";
       if (Object.prototype.hasOwnProperty.call(mp, "name")) {
         displayN = mp.name ? String(mp.name).trim() : null;
       }
@@ -4557,6 +4525,31 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
         });
       }
 
+      if (
+        !isLIEx &&
+        state.profileMode === "resume" &&
+        !Object.prototype.hasOwnProperty.call(mp, "experience") &&
+        inferred.experienceLines.length
+      ) {
+        expLines = inferred.experienceLines.slice(0, expMax);
+      }
+      if (
+        !isLIEx &&
+        state.profileMode === "resume" &&
+        !Object.prototype.hasOwnProperty.call(mp, "projects") &&
+        inferred.projectLines.length
+      ) {
+        projLinesLi = inferred.projectLines.slice(0, 4);
+      }
+
+      if (!Object.prototype.hasOwnProperty.call(mp, "name")) {
+        if (!isLIEx && state.profileMode === "resume") {
+          displayN = inferred.name || "Not detected";
+        } else if (!displayN || displayN === "there") {
+          if (inferred.name) displayN = inferred.name;
+        }
+      }
+
       function liSectionHtml(title, fieldKey, innerHtml) {
         var editBtn =
           "<button type=\"button\" class=\"btn-ghost pr-profile-edit-btn\" data-pr-field=\"" +
@@ -4587,7 +4580,7 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
         if (!displayName || !String(displayName).trim()) {
           return (
             rowOpen +
-            '<input type="text" class="pr-profile-field-input" data-pr-field="name" placeholder="Enter your name" value="" style="font-size:1.05rem;font-weight:700;width:100%;max-width:320px;padding:0.28rem 0.55rem;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);" />' +
+            '<div class="pr-name pr-muted">Not detected</div>' +
             rowClose
           );
         }
@@ -4607,7 +4600,8 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
           return "<div class=\"pr-line\">" + escapeHtml(line) + "</div>";
         }).join("");
       }
-      var prLabelChipsLine = function (label, chips, fieldKey) {
+      var prLabelChipsLine = function (label, chips, fieldKey, emptyMsg) {
+        var emptyChipMsg = emptyMsg !== undefined ? emptyMsg : PROFILE_EMPTY_MSG;
         var editBtn = fieldKey
           ? "<button type=\"button\" class=\"btn-ghost pr-profile-edit-btn\" data-pr-field=\"" +
             fieldKey +
@@ -4636,7 +4630,7 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
             '<span data-pr-body="' +
             fieldKey +
             '"><span class="pr-muted">' +
-            escapeHtml(PROFILE_EMPTY_MSG) +
+            escapeHtml(emptyChipMsg) +
             "</span></span></div>"
           );
         }
@@ -4704,10 +4698,10 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
           "<div class=\"pr-grid\">" +
           "<div class=\"pr-cell\"><h4>Basic Info</h4>" + basicBlock + "</div>" +
           "<div class=\"pr-cell\">" + liSectionHtml("Education", "education", cellLines(eduLines)) + "</div>" +
-          "<div class=\"pr-cell\">" + liSectionHtml("Experience", "experience", cellLines(expLines)) + "</div>" +
+          "<div class=\"pr-cell\">" + liSectionHtml("Experience", "experience", cellLines(expLines, EXP_OR_PROJ_EMPTY_MSG)) + "</div>" +
           "<div class=\"pr-cell\"><h4>Skills</h4><div style=\"display:flex;flex-wrap:wrap;gap:0.35rem;align-items:center;\">" + skillsHtmlLi + "</div></div>" +
           "<div class=\"pr-cell\" style=\"grid-column:1 / -1;\">" +
-          liSectionHtml("Projects", "projects", cellLines(projLinesLi)) +
+          liSectionHtml("Projects", "projects", cellLines(projLinesLi, EXP_OR_PROJ_EMPTY_MSG)) +
           "</div>" +
           "</div>";
       } else {
@@ -4759,6 +4753,22 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
         if ((!skillChipsR || !skillChipsR.length) && inferred.skillItems.length) {
           skillChipsR = inferred.skillItems.slice(0, 14);
         }
+        if (
+          !isLIEx &&
+          state.profileMode === "resume" &&
+          !Object.prototype.hasOwnProperty.call(mp, "experience") &&
+          inferred.experienceLines.length
+        ) {
+          expChipsR = uniqueChipsForDisplay(inferred.experienceLines.slice(0, 4), 24);
+        }
+        if (
+          !isLIEx &&
+          state.profileMode === "resume" &&
+          !Object.prototype.hasOwnProperty.call(mp, "projects") &&
+          inferred.projectLines.length
+        ) {
+          projChipsR = uniqueChipsForDisplay(inferred.projectLines.slice(0, 4), 28);
+        }
         var certChipsR = (parsed && parsed.certificationChips && parsed.certificationChips.length)
           ? parsed.certificationChips
           : uniqueChipsForDisplay(certLinesToChips((parsed && parsed.certifications) || []), 16);
@@ -4799,8 +4809,8 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
           "</div>" +
           "<div class=\"pr-grid\">" +
           "<div class=\"pr-cell\">" + prLabelChipsLine("Education", eduChipsR, "education") + "</div>" +
-          "<div class=\"pr-cell\">" + prLabelChipsLine("Experience", expChipsR, "experience") + "</div>" +
-          "<div class=\"pr-cell\">" + prLabelChipsLine("Projects", projChipsR, "projects") + prLabelChipsLine("Certifications", certChipsR) + "</div>" +
+          "<div class=\"pr-cell\">" + prLabelChipsLine("Experience", expChipsR, "experience", EXP_OR_PROJ_EMPTY_MSG) + "</div>" +
+          "<div class=\"pr-cell\">" + prLabelChipsLine("Projects", projChipsR, "projects", EXP_OR_PROJ_EMPTY_MSG) + prLabelChipsLine("Certifications", certChipsR) + "</div>" +
           "<div class=\"pr-cell\">" + prLabelChipsLine("Skills", skillChipsR) + "</div>" +
           "</div>";
       }
