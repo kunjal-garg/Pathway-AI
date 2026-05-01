@@ -2353,6 +2353,7 @@
               <div>
                 <h2 id="dash-greeting">Here's your roadmap, Alex.</h2>
                 <span class="role-badge" id="dash-role-badge">Product Manager</span>
+                <p id="dash-analyse-context" style="margin:0.35rem 0 0;font-size:0.85rem;color:var(--text-muted);line-height:1.4;"></p>
               </div>
               <button type="button" class="btn btn-secondary" id="btn-retake-assessment" style="flex-shrink:0;">Retake Assessment</button>
             </div>
@@ -2362,7 +2363,7 @@
             <p id="dash-gap-line" style="margin:0.4rem 0 0;font-size:0.9rem;color:var(--text-muted);line-height:1.45;"></p>
           </div>
           <div class="chart-card">
-            <h3>Skill gap snapshot</h3>
+            <h3 id="dash-skill-gap-title">Skill gap snapshot</h3>
             <div id="skill-bars"></div>
           </div>
           <h3 class="display" style="font-size:1.1rem;margin-top:0.25rem;">Priority learning modules</h3>
@@ -3770,6 +3771,16 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
         alert("Please choose a timeline.");
         return;
       }
+      var companiesArray = Array.isArray(state.dreamCompanies)
+        ? state.dreamCompanies.slice()
+        : [];
+      state.dreamCompanies = companiesArray;
+      try {
+        localStorage.setItem("pathwayai_dreamCompanies", JSON.stringify(companiesArray));
+      } catch (e) {}
+      console.log("Dream companies saved:", companiesArray);
+      console.log('Companies in localStorage:', 
+        localStorage.getItem('pathwayai_dreamCompanies'))
       showScreen("screen-3");
     });
   }
@@ -3864,6 +3875,98 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
     ].sort(function (a,b){ return b.pct - a.pct; }).slice(0,5);
   }
 
+  function inferResumeDisplayFromText(raw) {
+    var text = String(raw || "");
+    var lines = text.split(/\r?\n/).map(function (l) { return l.trim(); }).filter(function (l) { return l.length; });
+    var out = {
+      name: null,
+      email: null,
+      phone: null,
+      educationLines: [],
+      experienceLines: [],
+      skillItems: [],
+      projectLines: []
+    };
+    var em = text.match(/[\w.-]+@[\w.-]+\.\w+/);
+    if (em) out.email = em[0];
+    var ph = text.match(/[\+\d][\d\s\-\(\)]{9,}/);
+    if (ph) out.phone = ph[0].trim();
+
+    var ni;
+    for (ni = 0; ni < lines.length; ni++) {
+      var nline = lines[ni];
+      if (/[\d@]/.test(nline)) continue;
+      var words = nline.split(/\s+/).filter(Boolean);
+      if (words.length >= 2 && words.length <= 4 && !out.name) {
+        out.name = words.join(" ");
+      }
+    }
+
+    var eduKeys = ["University", "College", "Bachelor", "Master", "MBA", "B.Tech", "MS", "BS", "PhD"];
+    var eduRe = new RegExp(eduKeys.join("|"), "i");
+    lines.forEach(function (line) {
+      if (eduRe.test(line)) {
+        var cl = clampSummaryLine(line, 96);
+        if (cl && out.educationLines.indexOf(cl) === -1) out.educationLines.push(cl);
+      }
+    });
+    out.educationLines = out.educationLines.slice(0, 4);
+
+    var expRe = /\b(Analyst|Engineer|Manager|Intern|Developer|Consultant)\b/i;
+    lines.forEach(function (line) {
+      if (expRe.test(line) && line.length > 8 && line.length < 220) {
+        var ex = clampSummaryLine(line, 96);
+        if (ex && out.experienceLines.indexOf(ex) === -1) out.experienceLines.push(ex);
+      }
+    });
+    out.experienceLines = out.experienceLines.slice(0, 4);
+
+    var skillHeader = -1;
+    var si;
+    for (si = 0; si < lines.length; si++) {
+      if (/^(technical )?skills:?$/i.test(lines[si])) {
+        skillHeader = si + 1;
+        break;
+      }
+    }
+    if (skillHeader >= 0) {
+      var sj;
+      for (sj = skillHeader; sj < lines.length && sj < skillHeader + 20; sj++) {
+        var L = lines[sj];
+        if (!L) continue;
+        if (/^(education|experience|employment|work history|projects?|certifications?)/i.test(L)) break;
+        L.split(/[,;•\-\u2022|]/).forEach(function (piece) {
+          var p = piece.replace(/^[\s\-•]+/, "").trim();
+          if (p.length > 1 && p.length < 72 && out.skillItems.indexOf(p) === -1) {
+            out.skillItems.push(titleCase(p.toLowerCase()));
+          }
+        });
+      }
+    }
+    out.skillItems = out.skillItems.slice(0, 18);
+
+    var projHeader = -1;
+    var pi;
+    for (pi = 0; pi < lines.length; pi++) {
+      if (/^projects?:?$/i.test(lines[pi])) {
+        projHeader = pi + 1;
+        break;
+      }
+    }
+    if (projHeader >= 0) {
+      var pj;
+      for (pj = projHeader; pj < lines.length && pj < projHeader + 10; pj++) {
+        var PL = lines[pj];
+        if (!PL) continue;
+        if (/^(skills|education|experience|employment)/i.test(PL)) break;
+        out.projectLines.push(clampSummaryLine(PL, 96));
+      }
+    }
+    out.projectLines = out.projectLines.slice(0, 6);
+
+    return out;
+  }
+
   function renderProfileReady() {
     var s = loadAppState() || {};
     var parsed = state._resumePendingChooser ? null : getActiveResumeParsed();
@@ -3882,12 +3985,16 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
 
     var summary = document.getElementById("profile-ready-summary");
     if (summary) {
+      var rawResumeText = getResumeTextForGapApi();
+      var inferred = inferResumeDisplayFromText(rawResumeText);
+
       var displayN = parsed && (parsed.displayName || parsed.name) ? (parsed.displayName || parsed.name) : null;
       if (displayN) displayN = String(displayN).trim().split(/\s+/).slice(0, 6).join(" ");
       else displayN = null;
       if (!displayN) displayN = (s.manual && s.manual.name) ? String(s.manual.name).trim() : name;
-      var em = (parsed && parsed.email) || (state && state.email) || null;
-      var ph = parsed && parsed.phone ? parsed.phone : null;
+      if (!displayN && inferred.name) displayN = inferred.name;
+      var em = (parsed && parsed.email) || (state && state.email) || inferred.email || null;
+      var ph = parsed && parsed.phone ? parsed.phone : (inferred.phone || null);
 
       function formatEduItem(x) {
         if (!x) return "";
@@ -3911,6 +4018,9 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
       } else if (parsed && parsed.educationDisplay && parsed.educationDisplay.length) {
         eduLines = parsed.educationDisplay.slice(0, 2).map(function (x) { return clampSummaryLine(String(x), 96); });
       }
+      if (!eduLines.length && inferred.educationLines.length) {
+        eduLines = inferred.educationLines.slice(0, 2);
+      }
 
       var expMax = isLIEx ? 3 : 2;
       var expLines = [];
@@ -3918,6 +4028,9 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
         expLines = parsed.experience.slice(0, expMax).map(formatExpItem).filter(function (L) { return L && L.length; });
       } else if (parsed && parsed.experienceDisplay && parsed.experienceDisplay.length) {
         expLines = parsed.experienceDisplay.slice(0, expMax).map(function (x) { return clampSummaryLine(String(x), 96); });
+      }
+      if (!expLines.length && inferred.experienceLines.length) {
+        expLines = inferred.experienceLines.slice(0, expMax);
       }
 
       function cellLines(lines, emptyLabel) {
@@ -3968,6 +4081,10 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
         } else if (parsed && parsed.skills && parsed.skills.length) {
           skillsHtmlLi = parsed.skills.slice(0, 15).map(function (x) {
             return "<span class=\"skill-pill-mini\">" + escapeHtml(normalizeSkillDisplay(String(x).toLowerCase())) + "</span>";
+          }).join("");
+        } else if (inferred.skillItems.length) {
+          skillsHtmlLi = inferred.skillItems.slice(0, 15).map(function (x) {
+            return "<span class=\"skill-pill-mini\">" + escapeHtml(String(x)) + "</span>";
           }).join("");
         } else {
           skillsHtmlLi = "<span class=\"pr-muted\">No skills detected — you can add them manually</span>";
@@ -4022,6 +4139,18 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
         var projChipsR = (parsed && parsed.projectChips && parsed.projectChips.length)
           ? parsed.projectChips
           : uniqueChipsForDisplay(projectLinesToChips((parsed && parsed.projects) || [], ""), 28);
+        if ((!eduChipsR || !eduChipsR.length) && inferred.educationLines.length) {
+          eduChipsR = inferred.educationLines.slice(0, 8);
+        }
+        if ((!expChipsR || !expChipsR.length) && inferred.experienceLines.length) {
+          expChipsR = inferred.experienceLines.slice(0, 8);
+        }
+        if ((!projChipsR || !projChipsR.length) && inferred.projectLines.length) {
+          projChipsR = inferred.projectLines.slice(0, 8);
+        }
+        if ((!skillChipsR || !skillChipsR.length) && inferred.skillItems.length) {
+          skillChipsR = inferred.skillItems.slice(0, 14);
+        }
         var certChipsR = (parsed && parsed.certificationChips && parsed.certificationChips.length)
           ? parsed.certificationChips
           : uniqueChipsForDisplay(certLinesToChips((parsed && parsed.certifications) || []), 16);
@@ -5896,12 +6025,17 @@ function startScanSequence() {
       state.dreamCompanies && state.dreamCompanies.length
         ? String(state.dreamCompanies[0] || "").trim()
         : "";
+    var targetRole = (state.role && String(state.role).trim()) || null;
+    const dreamCompanies = JSON.parse(
+      localStorage.getItem('pathwayai_dreamCompanies') || '[]'
+    );
     var apiPayload = {
       userId: getOrCreateSessionUserId(),
       jobUrl: jobUrl != null ? jobUrl : null,
-      targetRole: (state.role && String(state.role).trim()) || null,
+      targetRole: targetRole,
       industry: (state.industry && String(state.industry).trim()) || null,
       company: dream0 || null,
+      dreamCompanies: dreamCompanies,
       resumeText: getResumeTextForGapApi(),
       assessmentAnswers: state.assessmentAnswers || []
     };
@@ -5911,6 +6045,12 @@ function startScanSequence() {
       return;
     }
     try {
+      console.log('Sending to backend:', {
+        targetRole,
+        dreamCompanies
+      });
+      console.log('Calling backend with companies:', 
+        dreamCompanies)
       var out = await pathwayaiInsforgeInvoke("analyze-gap", apiPayload);
       if (out && out.error) {
         throw new Error(out.error.message || "insforge");
@@ -6626,6 +6766,41 @@ function startScanSequence() {
     document.getElementById("dash-greeting").textContent = "Here's your roadmap, " + name + ".";
     document.getElementById("dash-role-badge").textContent = state.role || "Your role";
 
+    const dreamCompanies = JSON.parse(
+      localStorage.getItem('pathwayai_dreamCompanies') || '[]'
+    );
+    var dreamList = Array.isArray(dreamCompanies) ? dreamCompanies : [];
+    console.log('Dashboard companies:', 
+      JSON.parse(localStorage.getItem(
+        'pathwayai_dreamCompanies') || '[]'))
+    var analyseCtx = document.getElementById("dash-analyse-context");
+    if (analyseCtx) {
+      if (dreamList.length > 0) {
+        analyseCtx.innerHTML =
+          "Analysed against live job postings at " +
+          dreamList
+            .map(function (c) {
+              var t = String(c == null ? "" : c).trim();
+              return t ? '<span style="color:var(--cyan);">' + escapeHtml(t) + "</span>" : "";
+            })
+            .filter(Boolean)
+            .join(" · ");
+      } else {
+        analyseCtx.innerHTML = "";
+        analyseCtx.textContent = "Analysed against live job postings";
+      }
+    }
+    var roleForGapTitle = state.role || "Your role";
+    var gapTitleEl = document.getElementById("dash-skill-gap-title");
+    if (gapTitleEl) {
+      if (dreamList.length > 0) {
+        gapTitleEl.textContent =
+          "Your skills gap — " + roleForGapTitle + " at " + dreamList.join(", ");
+      } else {
+        gapTitleEl.textContent = "Your skills gap — " + roleForGapTitle;
+      }
+    }
+
     // dashBannerHook
     var st = loadAppState() || {};
     var banner = document.getElementById("dash-assess-banner");
@@ -6642,10 +6817,51 @@ function startScanSequence() {
       }
     }
 
+    var gapR = null;
+    try {
+      var lsrGap = localStorage.getItem("pathwayai_gapReport");
+      if (lsrGap) gapR = JSON.parse(lsrGap);
+    } catch (eGap) {}
+    if (!gapR) {
+      try {
+        if (payload && payload.gapReport) gapR = payload.gapReport;
+      } catch (e2) {}
+    }
+
+    var usedGapMissingBars = false;
     var seed;
     var skills;
     var readiness;
-    if (payload && payload.skills && payload.skills.length) {
+
+    if (gapR && Array.isArray(gapR.missingSkills) && gapR.missingSkills.length) {
+      usedGapMissingBars = true;
+      var resumeBlob = (getResumeTextForGapApi() || "").toLowerCase();
+      var examScoreNum = null;
+      try {
+        var esDash = localStorage.getItem("pathwayai_examScore");
+        if (esDash != null && esDash !== "") examScoreNum = parseInt(esDash, 10);
+      } catch (eExam) {}
+      if (examScoreNum == null || isNaN(examScoreNum)) examScoreNum = null;
+
+      skills = gapR.missingSkills.map(function (sk) {
+        var nm = String(sk || "").trim();
+        if (!nm) return null;
+        var inR = resumeBlob.indexOf(nm.toLowerCase()) !== -1;
+        var base = inR ? 65 : 25;
+        var pct = examScoreNum != null ? Math.round((base + examScoreNum) / 2) : base;
+        pct = Math.min(100, Math.max(0, pct));
+        var lbl = pct < 40 ? "Critical" : (pct <= 70 ? "Needs Work" : "Good");
+        var col = pct < 40 ? "#e5484d" : (pct <= 70 ? "#f76b15" : "#30a46c");
+        return { name: nm, pct: pct, gapLabel: lbl, barColor: col };
+      }).filter(Boolean);
+
+      readiness = gapR.finalScore != null && !isNaN(Number(gapR.finalScore))
+        ? Math.min(100, Math.max(0, Math.round(Number(gapR.finalScore))))
+        : (gapR.matchScore != null && !isNaN(Number(gapR.matchScore))
+          ? Math.min(100, Math.max(0, Math.round(Number(gapR.matchScore))))
+          : 50);
+      seed = hashStr(String(state.role || "") + ",gapmissing");
+    } else if (payload && payload.skills && payload.skills.length) {
       skills = payload.skills;
       seed = payload.seed != null ? payload.seed : hashStr(state.role + state.industry + state.email);
       readiness = payload.readiness != null ? payload.readiness : Math.round(skills.reduce(function (a, b) { return a + b.pct; }, 0) / skills.length);
@@ -6667,6 +6883,7 @@ function startScanSequence() {
       }
     }
     if (!skills || !skills.length) {
+      usedGapMissingBars = false;
       skills = [
         { name: "Core Skills", pct: 55 },
         { name: "Communication", pct: 70 },
@@ -6679,24 +6896,16 @@ function startScanSequence() {
     }
     state.persistedDashboard = null;
 
-    var skillBoosts = loadModuleSkillBoostMap();
-    skills = skills.map(function (s) {
-      var bonus = skillBoosts[s.name] || 0;
-      return { name: s.name, pct: Math.min(95, Math.round((s.pct || 0) + bonus)), detected: s.detected };
-    });
-    readiness = Math.round(skills.reduce(function (a, b) { return a + b.pct; }, 0) / skills.length);
-
-    var gapR = null;
-    try {
-      if (payload && payload.gapReport) gapR = payload.gapReport;
-    } catch (e) {}
-    if (!gapR) {
-      try {
-        var lsr = localStorage.getItem("pathwayai_gapReport");
-        if (lsr) gapR = JSON.parse(lsr);
-      } catch (e) {}
+    if (!usedGapMissingBars) {
+      var skillBoosts = loadModuleSkillBoostMap();
+      skills = skills.map(function (s) {
+        var bonus = skillBoosts[s.name] || 0;
+        return { name: s.name, pct: Math.min(95, Math.round((s.pct || 0) + bonus)), detected: s.detected };
+      });
+      readiness = Math.round(skills.reduce(function (a, b) { return a + b.pct; }, 0) / skills.length);
     }
-    if (gapR) {
+
+    if (!usedGapMissingBars && gapR) {
       var gr = Number(gapR.finalScore != null ? gapR.finalScore : (gapR.matchPercentage != null ? gapR.matchPercentage : NaN));
       if (!isNaN(gr)) {
         readiness = Math.min(100, Math.max(0, Math.round(gr)));
@@ -6705,10 +6914,12 @@ function startScanSequence() {
 
     const bars = document.getElementById("skill-bars");
     bars.innerHTML = skills.map(function (s) {
-      return "<div class=\"bar-row\"><div class=\"bar-label\"><span>" + s.name +
+      var gapTag = s.gapLabel ? (" <span style=\"font-size:0.72rem;opacity:0.85;\">" + escapeHtml(s.gapLabel) + "</span>") : "";
+      var fillExtra = s.barColor ? ("background:" + s.barColor + ";") : "";
+      return "<div class=\"bar-row\"><div class=\"bar-label\"><span>" + escapeHtml(String(s.name)) +
         (s.detected ? " <span style=\"margin-left:8px;font-size:0.72rem;color:var(--cyan);font-weight:700;\">Parsed from your resume</span>" : "") +
-        "</span><span>" + s.pct + "%</span></div>" +
-        "<div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:0%\" data-w=\"" + s.pct + "\"></div></div></div>";
+        "</span><span>" + s.pct + "%" + gapTag + "</span></div>" +
+        "<div class=\"bar-track\"><div class=\"bar-fill\" style=\"width:0%;" + fillExtra + "\" data-w=\"" + s.pct + "\"></div></div></div>";
     }).join("");
 
     window.requestAnimationFrame(function () {

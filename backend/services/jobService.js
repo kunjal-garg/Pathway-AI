@@ -29,13 +29,27 @@ async function getRedisClient() {
   }
 }
 
-async function getCachedJobProfile(role) {
+function normalizeCompanies(companies) {
+  if (!companies || !Array.isArray(companies)) return [];
+  return companies.map(function (c) {
+    return String(c == null ? "" : c).trim();
+  }).filter(Boolean);
+}
+
+function redisCacheKeyForRole(role, companies) {
+  var suffix =
+    companies && companies.length
+      ? companies.join("-").toLowerCase()
+      : "general";
+  return "jobprofile:" + role.toLowerCase().trim() + ":" + suffix;
+}
+
+async function getCachedJobProfile(role, companies) {
   try {
     const client = await getRedisClient();
     if (!client) return null;
-    const cached = await client.get(
-      'jobprofile:' + role.toLowerCase().trim()
-    );
+    const cos = normalizeCompanies(companies);
+    const cached = await client.get(redisCacheKeyForRole(role, cos));
     console.log('Redis get result for', role, ':', 
       cached ? 'FOUND' : 'NOT FOUND');
     if (cached) {
@@ -50,12 +64,13 @@ async function getCachedJobProfile(role) {
   }
 }
 
-async function setCachedJobProfile(role, data) {
+async function setCachedJobProfile(role, data, companies) {
   try {
     const client = await getRedisClient();
     if (!client) return;
+    const cos = normalizeCompanies(companies);
     await client.setEx(
-      'jobprofile:' + role.toLowerCase().trim(),
+      redisCacheKeyForRole(role, cos),
       86400,
       JSON.stringify(data)
     );
@@ -79,8 +94,9 @@ function resolveRole(roleOrInput) {
   return "Professional";
 }
 
-function getMockJobProfile(role) {
+function getMockJobProfile(role, companies) {
   var title = role && String(role).trim() ? String(role).trim() : "Professional";
+  var tc = normalizeCompanies(companies);
   return {
     jobTitle: title,
     requiredSkills: ["Communication", "Problem Solving", "Data Analysis", "Project Management", "Excel"],
@@ -97,6 +113,7 @@ function getMockJobProfile(role) {
     education: "Bachelor degree required",
     scrapedAt: new Date().toISOString(),
     source: "mock",
+    targetCompanies: tc,
   };
 }
 
@@ -396,58 +413,91 @@ function mapPayloadToProfile(payload, role) {
   };
 }
 
-async function extractJobProfileFromUrl(roleOrInput) {
+async function extractJobProfileFromUrl(roleOrInput, companies) {
+  var companiesNorm = normalizeCompanies(companies);
   try {
     var role = resolveRole(roleOrInput);
     console.log('Fetching job profile for:', role);
 
-    const cached = await getCachedJobProfile(role);
+    const cached = await getCachedJobProfile(role, companiesNorm);
     if (cached) return cached;
 
     if (!isTinyfishKeyPresent()) {
       console.log("No Tinyfish key - using mock data");
-      return getMockJobProfile(role);
+      return getMockJobProfile(role, companiesNorm);
     }
 
     var key = config.TINYFISH_API_KEY.trim();
 
     console.log('Calling Tinyfish Search API for:', role);
 
-    console.log('Tinyfish Search request params:', {
-      url: TINYFISH_SEARCH_URL,
-      query: role + ' required skills qualifications job ' + new Date().getFullYear()
-    });
-
-    var [result1, result2] = await Promise.all([
-      axios.get(TINYFISH_SEARCH_URL, {
+    var year = new Date().getFullYear();
+    var axiosOpts = function (queryStr) {
+      return {
         headers: { 
-          'X-API-Key': key,
-          'Content-Type': 'application/json'
+          'X-API-Key': key
         },
         params: { 
-          query: role + ' required skills qualifications job ' + new Date().getFullYear(),
+          query: queryStr,
           limit: 10
         },
         timeout: 15000
-      }),
-      axios.get(TINYFISH_SEARCH_URL, {
-        headers: { 
-          'X-API-Key': key,
-          'Content-Type': 'application/json'
-        },
-        params: { 
-          query: role + ' job description tools experience requirements ' + new Date().getFullYear(),
-          limit: 10
-        },
-        timeout: 15000
-      })
-    ]);
+      };
+    };
 
-    console.log('Tinyfish Search status:', result1.status, result2.status);
+    var result1;
+    var result2;
+    var result3;
+
+    if (companiesNorm.length === 0) {
+      var query1 = role + ' required skills qualifications job ' + year;
+      var query2 = role + ' job description tools experience ' + year;
+      console.log('Tinyfish Search request params:', {
+        url: TINYFISH_SEARCH_URL,
+        query: query1
+      });
+      var pair = await Promise.all([
+        axios.get(TINYFISH_SEARCH_URL, axiosOpts(query1)),
+        axios.get(TINYFISH_SEARCH_URL, axiosOpts(query2))
+      ]);
+      result1 = pair[0];
+      result2 = pair[1];
+      result3 = { data: { results: [] } };
+      console.log('Tinyfish Search status:', result1.status, result2.status);
+    } else {
+      var query1c = role + ' required skills qualifications job ' + year;
+      var query2c =
+        role +
+        ' at ' +
+        companiesNorm.join(' OR ') +
+        ' required skills ' +
+        year;
+      var query3c =
+        role +
+        ' ' +
+        companiesNorm[0] +
+        ' interview skills requirements ' +
+        year;
+      console.log('Company searches:', [query2c, query3c]);
+      console.log('Tinyfish Search request params:', {
+        url: TINYFISH_SEARCH_URL,
+        query: query1c
+      });
+      var trip = await Promise.all([
+        axios.get(TINYFISH_SEARCH_URL, axiosOpts(query1c)),
+        axios.get(TINYFISH_SEARCH_URL, axiosOpts(query2c)),
+        axios.get(TINYFISH_SEARCH_URL, axiosOpts(query3c))
+      ]);
+      result1 = trip[0];
+      result2 = trip[1];
+      result3 = trip[2];
+      console.log('Tinyfish Search status:', result1.status, result2.status, result3.status);
+    }
 
     var allResults = [
       ...(result1.data?.results || []),
-      ...(result2.data?.results || [])
+      ...(result2.data?.results || []),
+      ...(result3.data?.results || [])
     ];
 
     console.log('Tinyfish Search returned:', allResults.length, 'results');
@@ -495,7 +545,7 @@ async function extractJobProfileFromUrl(roleOrInput) {
 
     if (ranked.length === 0) {
       console.log('No skills extracted - using mock');
-      return getMockJobProfile(role);
+      return getMockJobProfile(role, companiesNorm);
     }
 
     const result = {
@@ -516,10 +566,11 @@ async function extractJobProfileFromUrl(roleOrInput) {
       yearsExperience: "2-4 years",
       education: "Bachelor degree required",
       scrapedAt: new Date().toISOString(),
-      source: "tinyfish-search"
+      source: "tinyfish-search",
+      targetCompanies: companiesNorm
     };
 
-    await setCachedJobProfile(role, result);
+    await setCachedJobProfile(role, result, companiesNorm);
     return result;
 
   } catch (err) {
@@ -530,7 +581,7 @@ async function extractJobProfileFromUrl(roleOrInput) {
     console.log('Tinyfish request params were:', JSON.stringify(err.config?.params));
     console.log('Tinyfish request headers were:', JSON.stringify(err.config?.headers));
     console.log("Tinyfish unavailable - using mock data");
-    return getMockJobProfile(resolveRole(roleOrInput));
+    return getMockJobProfile(resolveRole(roleOrInput), normalizeCompanies(companies));
   }
 }
 

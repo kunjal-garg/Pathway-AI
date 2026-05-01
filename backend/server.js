@@ -61,8 +61,12 @@ app.post("/api/analyze-gap", async function (req, res) {
     var company = body.company;
     var resumeText = body.resumeText;
     var assessmentAnswers = body.assessmentAnswers;
+    var dreamCompanies = Array.isArray(body.dreamCompanies) ? body.dreamCompanies : [];
 
-    var jobProfilePromise = jobService.extractJobProfileFromUrl(targetRole);
+    var jobProfilePromise = jobService.extractJobProfileFromUrl(
+      targetRole,
+      dreamCompanies
+    );
     var timeoutPromise = new Promise(function (resolve) {
       setTimeout(function () {
         resolve(null);
