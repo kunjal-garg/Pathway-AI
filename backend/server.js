@@ -52,6 +52,8 @@ app.get("/api/health", function (req, res) {
 
 app.post("/api/analyze-gap", async function (req, res) {
   try {
+    res.setTimeout(60000);
+
     var body = req.body || {};
     var jobUrl = body.jobUrl;
     var targetRole = body.targetRole;
@@ -60,12 +62,15 @@ app.post("/api/analyze-gap", async function (req, res) {
     var resumeText = body.resumeText;
     var assessmentAnswers = body.assessmentAnswers;
 
-    var jobProfile = await jobService.extractJobProfileFromUrl({
-      jobUrl: jobUrl,
-      targetRole: targetRole,
-      industry: industry,
-      company: company,
+    var jobProfilePromise = jobService.extractJobProfileFromUrl(targetRole);
+    var timeoutPromise = new Promise(function (resolve) {
+      setTimeout(function () {
+        resolve(null);
+      }, 25000);
     });
+    var jobProfile =
+      (await Promise.race([jobProfilePromise, timeoutPromise])) ||
+      jobService.getMockJobProfile(targetRole);
     var resumeProfile = resumeService.parseResumeSkills(
       resumeText == null ? "" : String(resumeText)
     );

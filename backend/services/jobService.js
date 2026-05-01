@@ -1,35 +1,102 @@
 const axios = require("axios");
 const config = require("../config");
+const redis = require('redis');
+let redisClient = null;
 
-var TINYFISH_GOAL_API_URL = "https://api.tinyfish.ai/v1/extract";
+async function getRedisClient() {
+  console.log('Redis URL:', config.REDIS_URL ? 
+    'configured' : 'MISSING');
+  var redisUrl =
+    config.REDIS_URL != null && String(config.REDIS_URL).trim() !== ''
+      ? String(config.REDIS_URL).trim()
+      : '';
+  if (!redisUrl) {
+    console.log('Redis unavailable: REDIS_URL empty or not set');
+    return null;
+  }
+  if (redisClient && redisClient.isOpen) return redisClient;
+  try {
+    redisClient = redis.createClient({ 
+      url: redisUrl 
+    });
+    redisClient.on('error', (e) => 
+      console.log('Redis error:', e.message));
+    await redisClient.connect();
+    return redisClient;
+  } catch (e) {
+    console.log('Redis unavailable:', e.message);
+    return null;
+  }
+}
 
-/** Legacy single-URL goal when only a job posting URL is provided. */
-var SINGLE_URL_GOAL =
-  "Extract job title, company name, required skills, preferred skills, responsibilities, tools, years of experience, and education requirements from this job posting URL. Return clean JSON only.";
+async function getCachedJobProfile(role) {
+  try {
+    const client = await getRedisClient();
+    if (!client) return null;
+    const cached = await client.get(
+      'jobprofile:' + role.toLowerCase().trim()
+    );
+    console.log('Redis get result for', role, ':', 
+      cached ? 'FOUND' : 'NOT FOUND');
+    if (cached) {
+      console.log('Cache HIT for role:', role);
+      return JSON.parse(cached);
+    }
+    console.log('Cache MISS for role:', role);
+    return null;
+  } catch (e) {
+    console.log('Cache get error:', e.message);
+    return null;
+  }
+}
 
-function getMockJobProfile() {
+async function setCachedJobProfile(role, data) {
+  try {
+    const client = await getRedisClient();
+    if (!client) return;
+    await client.setEx(
+      'jobprofile:' + role.toLowerCase().trim(),
+      86400,
+      JSON.stringify(data)
+    );
+    console.log('Cached job profile for:', role, '(24hrs)');
+  } catch (e) {
+    console.log('Cache set error:', e.message);
+  }
+}
+
+var TINYFISH_SEARCH_URL = "https://api.search.tinyfish.ai";
+
+function resolveRole(roleOrInput) {
+  if (typeof roleOrInput === "string") {
+    var s = roleOrInput.trim();
+    return s || "Professional";
+  }
+  if (roleOrInput && typeof roleOrInput === "object" && roleOrInput.targetRole != null) {
+    var t = String(roleOrInput.targetRole).trim();
+    return t || "Professional";
+  }
+  return "Professional";
+}
+
+function getMockJobProfile(role) {
+  var title = role && String(role).trim() ? String(role).trim() : "Professional";
   return {
-    jobTitle: "Product Manager",
-    company: "Example Company",
-    requiredSkills: [
-      "SQL",
-      "Agile",
-      "User Research",
-      "Product Roadmap",
-      "Data Analysis",
-      "Excel",
-    ],
-    preferredSkills: ["A/B Testing", "Figma", "Python", "Tableau"],
+    jobTitle: title,
+    requiredSkills: ["Communication", "Problem Solving", "Data Analysis", "Project Management", "Excel"],
+    preferredSkills: ["SQL", "Python", "Tableau"],
     responsibilities: [
-      "Define product requirements",
-      "Analyze user feedback",
-      "Work with engineering and design teams",
-      "Define and track success metrics",
-      "Create product roadmap",
+      "Analyze data and present findings",
+      "Collaborate with cross-functional teams",
+      "Support business decision making",
+      "Create reports and dashboards",
+      "Identify trends and insights",
     ],
-    yearsExperience: "2-4 years",
-    education: "Bachelors degree required",
-    tools: ["Jira", "Confluence", "Google Analytics"],
+    tools: ["Excel", "PowerPoint", "Google Sheets"],
+    yearsExperience: "0-2 years",
+    education: "Bachelor degree required",
+    scrapedAt: new Date().toISOString(),
+    source: "mock",
   };
 }
 
@@ -38,66 +105,14 @@ function isTinyfishKeyPresent() {
   return typeof k === "string" && k.trim() !== "";
 }
 
-function normalizeInput(input) {
-  if (input == null) return { jobUrl: null, targetRole: null, industry: null, company: null };
-  if (typeof input === "string") {
-    return { jobUrl: input, targetRole: null, industry: null, company: null };
-  }
-  return {
-    jobUrl: input.jobUrl == null || input.jobUrl === "" ? null : String(input.jobUrl).trim(),
-    targetRole: input.targetRole == null || input.targetRole === "" ? null : String(input.targetRole).trim(),
-    industry: input.industry == null || input.industry === "" ? null : String(input.industry).trim(),
-    company: input.company == null || input.company === "" ? null : String(input.company).trim(),
-  };
-}
-
-/**
- * @param {string} role
- * @param {string} industry
- * @param {string} company
- */
-function buildMultiPostingGoal(role, industry, company) {
-  var ind =
-    industry && String(industry).trim() && industry !== "general"
-      ? " Focus on the " + industry + " industry."
-      : "";
-  return (
-    "Search for " +
-    role +
-    " job postings at " +
-    company +
-    " or similar companies. Extract required skills, preferred skills, responsibilities, and years of experience from each posting. " +
-    "Find 5-10 current live job postings. " +
-    ind +
-    ' Return clean JSON only. Use a top-level "postings" array; each object must have: jobTitle, company, ' +
-    "requiredSkills (string array), preferredSkills (string array), responsibilities (string array), and yearsExperience (string)."
-  );
-}
-
-/**
- * A stable entry page for job search so Tinyfish can act on a real target.
- * @param {string} role
- * @param {string} industry
- * @param {string} company
- */
-function buildJobSearchTargetUrl(role, industry, company) {
-  var kw = [role, industry, company, "jobs"].filter(Boolean).join(" ");
-  return (
-    "https://www.linkedin.com/jobs/search?keywords=" + encodeURIComponent(kw.trim() || "jobs")
-  );
-}
-
 function normalizeParsedBody(data) {
   if (data == null) return null;
-  if (Array.isArray(data) && data.length) {
-    return { postings: data };
-  }
   if (typeof data === "object" && !Array.isArray(data)) return data;
   if (typeof data === "string") {
-    var s = data.trim();
-    if (!s) return null;
+    var str = data.trim();
+    if (!str) return null;
     try {
-      return JSON.parse(s);
+      return JSON.parse(str);
     } catch (e) {
       return null;
     }
@@ -105,37 +120,20 @@ function normalizeParsedBody(data) {
   return null;
 }
 
-/**
- * @param {object} parsed
- */
-function unwrapResult(parsed) {
-  if (!parsed || typeof parsed !== "object") return parsed;
-  var c = 0;
-  var cur = parsed;
-  while (cur && typeof cur === "object" && c < 5) {
-    if (Array.isArray(cur.postings) && cur.postings.length) return cur;
-    if (Array.isArray(cur.jobs) && cur.jobs.length) {
-      return { postings: cur.jobs };
-    }
-    if (Array.isArray(cur.results) && cur.results.length) {
-      return { postings: cur.results };
-    }
-    if (cur.result && typeof cur.result === "object") {
-      cur = cur.result;
-      c++;
-      continue;
-    }
-    if (cur.data && typeof cur.data === "object") {
-      cur = cur.data;
-      c++;
-      continue;
-    }
-    break;
+function stripJsonFence(raw) {
+  if (raw == null || typeof raw !== "string") return raw;
+  var s = raw.trim();
+  if (s.indexOf("```") !== -1) {
+    s = s.replace(/^```[a-zA-Z]*\n?/m, "").replace(/\n?```$/m, "").trim();
   }
-  if (Array.isArray(parsed) && parsed.length) {
-    return { postings: parsed };
-  }
-  return parsed;
+  return s;
+}
+
+function getField(o, camel, snake) {
+  if (!o || typeof o !== "object") return null;
+  if (o[camel] != null) return o[camel];
+  if (snake && o[snake] != null) return o[snake];
+  return null;
 }
 
 function asStringArray(v) {
@@ -145,75 +143,44 @@ function asStringArray(v) {
       .map(function (x) {
         return String(x == null ? "" : x).trim();
       })
-      .filter(function (s) {
-        return s.length > 0;
-      });
+      .filter(Boolean);
   }
   if (typeof v === "string" && v.trim()) {
     return v
       .split(/[,;\n]/)
-      .map(function (s) {
-        return s.trim();
+      .map(function (x) {
+        return x.trim();
       })
-      .filter(function (s) {
-        return s.length > 0;
-      });
+      .filter(Boolean);
   }
   return [];
 }
 
 function normalizeSkillToken(s) {
-  var t = String(s).trim();
-  if (!t) return "";
-  return t.replace(/\s+/g, " ");
+  return String(s || "")
+    .trim()
+    .replace(/\s+/g, " ");
 }
 
-/**
- * @param {object} posting
- * @param {string} key
- */
-function getPostingField(posting, key) {
-  if (!posting || typeof posting !== "object") return null;
-  var snake = key.replace(/([A-Z])/g, "_$1").toLowerCase();
-  if (posting[key] != null) return posting[key];
-  if (posting[snake] != null) return posting[snake];
-  return null;
-}
-
-/**
- * @param {object} posting
- * @param {string[]} out
- */
-function pushFromPosting(posting, fieldNames, out) {
-  for (var i = 0; i < fieldNames.length; i++) {
-    var f = getPostingField(posting, fieldNames[i]);
-    var arr = asStringArray(f);
-    for (var j = 0; j < arr.length; j++) {
-      out.push(arr[j]);
-    }
-  }
-}
-
-/**
- * @param {object[]} postings
- * @param {function} collectFromPost
- * @param {number} maxItems
- */
-function aggregateByFrequency(postings, collectFromPost, maxItems) {
+function aggregateSkillFrequency(postings, maxOut) {
   var counts = {};
   var order = [];
   for (var p = 0; p < postings.length; p++) {
-    var posted = collectFromPost(postings[p]) || [];
+    var post = postings[p];
+    if (!post || typeof post !== "object") continue;
+    var skills = asStringArray(
+      getField(post, "requiredSkills", "required_skills") ||
+        getField(post, "skillsRequired", "skills_required")
+    );
     var seen = {};
-    for (var s = 0; s < posted.length; s++) {
-      var raw = posted[s];
-      var n = normalizeSkillToken(raw);
-      if (!n) continue;
-      var k = n.toLowerCase();
+    for (var i = 0; i < skills.length; i++) {
+      var tok = normalizeSkillToken(skills[i]);
+      if (!tok) continue;
+      var k = tok.toLowerCase();
       if (seen[k]) continue;
       seen[k] = true;
-      if (counts[k] == null) {
-        counts[k] = { n: 1, display: n };
+      if (!counts[k]) {
+        counts[k] = { n: 1, display: tok };
         order.push(k);
       } else {
         counts[k].n += 1;
@@ -228,234 +195,346 @@ function aggregateByFrequency(postings, collectFromPost, maxItems) {
   var top = order.map(function (k) {
     return counts[k].display;
   });
-  if (maxItems == null) maxItems = 15;
-  if (!top.length) return [];
-  return top.slice(0, Math.min(maxItems, top.length));
+  if (maxOut == null) maxOut = 24;
+  return top.slice(0, Math.min(maxOut, top.length));
 }
 
-function collectRequiredFromPost(post) {
-  var out = [];
-  if (!post) return out;
-  pushFromPosting(
-    post,
-    ["requiredSkills", "required_skills", "required", "mustHave", "must_have", "skillsRequired"],
-    out
-  );
-  if (out.length) return out;
-  var s = getPostingField(post, "skills");
-  if (s && typeof s === "object" && s.required) {
-    return asStringArray(s.required);
-  }
-  return out;
-}
-
-function collectPreferredFromPost(post) {
-  var out = [];
-  if (!post) return out;
-  pushFromPosting(
-    post,
-    [
-      "preferredSkills",
-      "preferred_skills",
-      "niceToHave",
-      "nice_to_have",
-      "optionalSkills",
-    ],
-    out
-  );
-  if (out.length) return out;
-  var s = getPostingField(post, "skills");
-  if (s && typeof s === "object" && s.preferred) {
-    return asStringArray(s.preferred);
-  }
-  return out;
-}
-
-/**
- * @param {object[]} postings
- * @param {string} role
- * @param {string} companyHint
- * @param {string[]} topRequired
- */
-function buildProfileFromPostings(postings, role, industry, companyHint, topRequired) {
-  var p0 = postings && postings[0] ? postings[0] : null;
-  var title =
-    p0 && getPostingField(p0, "jobTitle")
-      ? String(getPostingField(p0, "jobTitle"))
-      : p0 && getPostingField(p0, "title")
-        ? String(getPostingField(p0, "title"))
-        : role + " (market sample)";
-  var comp =
-    (companyHint && String(companyHint)) ||
-    (p0 && getPostingField(p0, "company") && String(getPostingField(p0, "company"))) ||
-    "Multiple employers";
-  var prefUniq = aggregateByFrequency(
-    postings || [],
-    collectPreferredFromPost,
-    12
-  );
-
-  var resp = [];
-  for (var r = 0; r < (postings || []).length; r++) {
-    var g = asStringArray(getPostingField(postings[r], "responsibilities"));
-    for (var x = 0; x < g.length; x++) {
-      if (g[x]) resp.push(String(g[x]));
-    }
-  }
-  var responsibilities = Array.from(new Set(resp)).slice(0, 8);
-  if (responsibilities.length < 3 && p0) {
-    responsibilities = asStringArray(
-      getPostingField(p0, "responsibilities")
-    ).slice(0, 5);
-  }
-
-  var yExp = "Varies";
-  var y0 = p0
-    ? getPostingField(p0, "yearsExperience") || getPostingField(p0, "years_experience")
-    : null;
-  if (!y0 && p0) y0 = getPostingField(p0, "experienceLevel");
-  if (y0) yExp = String(y0);
-
-  var education =
-    p0 && getPostingField(p0, "education") ? String(getPostingField(p0, "education")) : "";
-  if (!education && industry) {
-    education = "Requirements vary; see postings in " + industry;
-  } else if (!education) {
-    education = "See individual postings";
-  }
-
-  var tools = [];
-  if (p0) tools = asStringArray(getPostingField(p0, "tools"));
-  if (!tools.length) {
-    for (var t = 0; t < topRequired.length; t++) {
-      if (/Jira|Confluence|Figma|Tableau|SQL|Python|Excel|Power BI|AWS|Azure|GCP|Snowflake|Spark/i.test(
-        topRequired[t]
-      )) {
-        tools.push(topRequired[t]);
+function aggregateToolsFrequency(postings, maxOut) {
+  var counts = {};
+  var order = [];
+  for (var p = 0; p < postings.length; p++) {
+    var post = postings[p];
+    if (!post || typeof post !== "object") continue;
+    var t = getField(post, "tools", "common_tools");
+    var arr = Array.isArray(t) ? asStringArray(t) : typeof t === "string" ? asStringArray(t) : [];
+    var seen = {};
+    for (var i = 0; i < arr.length; i++) {
+      var tok = normalizeSkillToken(arr[i]);
+      if (!tok) continue;
+      var k = tok.toLowerCase();
+      if (seen[k]) continue;
+      seen[k] = true;
+      if (!counts[k]) {
+        counts[k] = { n: 1, display: tok };
+        order.push(k);
+      } else {
+        counts[k].n += 1;
       }
     }
   }
+  order.sort(function (a, b) {
+    var d = (counts[b].n || 0) - (counts[a].n || 0);
+    if (d !== 0) return d;
+    return a.localeCompare(b);
+  });
+  var top = order.map(function (k) {
+    return counts[k].display;
+  });
+  if (maxOut == null) maxOut = 16;
+  return top.slice(0, Math.min(maxOut, top.length));
+}
 
+function collectPreferredAcross(postings) {
+  var out = [];
+  var seen = {};
+  for (var p = 0; p < postings.length; p++) {
+    var post = postings[p];
+    if (!post || typeof post !== "object") continue;
+    var arr = asStringArray(getField(post, "preferredSkills", "preferred_skills"));
+    for (var i = 0; i < arr.length; i++) {
+      var k = normalizeSkillToken(arr[i]).toLowerCase();
+      if (!k || seen[k]) continue;
+      seen[k] = true;
+      out.push(arr[i]);
+    }
+  }
+  return out.slice(0, 24);
+}
+
+function topResponsibilitiesAggregated(postings, limit) {
+  limit = limit == null ? 5 : limit;
+  var freq = {};
+  var order = [];
+  for (var p = 0; p < postings.length; p++) {
+    var post = postings[p];
+    if (!post || typeof post !== "object") continue;
+    var rs = asStringArray(getField(post, "responsibilities", "responsibility"));
+    for (var i = 0; i < rs.length; i++) {
+      var line = normalizeSkillToken(rs[i]);
+      if (line.length < 6) continue;
+      var k = line.toLowerCase().slice(0, 140);
+      if (!freq[k]) {
+        freq[k] = { n: 1, display: line };
+        order.push(k);
+      } else {
+        freq[k].n += 1;
+      }
+    }
+  }
+  order.sort(function (a, b) {
+    return (freq[b].n || 0) - (freq[a].n || 0);
+  });
+  return order.slice(0, limit).map(function (k) {
+    return freq[k].display;
+  });
+}
+
+function pickYearsEducation(payload, postings) {
+  var years =
+    getField(payload, "yearsExperience", "years_experience") ||
+    getField(payload, "years_of_experience", "years_of_experience_required") ||
+    null;
+  if (years == null && postings && postings[0]) {
+    years =
+      getField(postings[0], "yearsExperience", "years_experience") ||
+      getField(postings[0], "experienceLevel", "experience_level");
+  }
+  var edu =
+    getField(payload, "education", "education_requirements") ||
+    getField(payload, "educationRequirements", "education_requirements");
+  if (edu == null && postings && postings[0]) {
+    edu = getField(postings[0], "education", "education_requirements");
+  }
   return {
-    jobTitle: title,
-    company: comp,
-    requiredSkills: topRequired,
-    preferredSkills: prefUniq,
-    responsibilities: responsibilities.length
-      ? responsibilities
-      : [
-          "Key responsibilities are inferred from recent " + role + " postings" + (industry ? " in " + industry : ""),
-        ],
-    yearsExperience: yExp,
-    education: education,
-    tools: tools.length ? tools.slice(0, 6) : ["Relevant to role and industry"],
+    yearsExperience: years != null ? String(years) : "",
+    education: edu != null ? String(edu) : "",
   };
 }
 
 /**
- * @param {object} parsed
+ * Normalize axios response.data into one payload object for mapping.
+ * Supports: data.result, data.postings / data.jobs, top-level requiredSkills on data.
+ * @param {object} data - response.data from axios
  */
-function postingsFromUnwrapped(parsed) {
-  var u = unwrapResult(parsed) || {};
-  var list = u.postings;
-  if (!Array.isArray(list) || !list.length) {
-    if (u.jobTitle && (u.requiredSkills != null)) {
-      return [u];
-    }
-    return [];
+function extractPayloadFromResponseData(data) {
+  if (!data || typeof data !== "object") return null;
+
+  if (Array.isArray(data.postings) && data.postings.length) {
+    return data;
   }
-  return list.filter(function (x) {
-    return x && typeof x === "object";
-  });
+  if (Array.isArray(data.jobs) && data.jobs.length) {
+    return data;
+  }
+  if (data.requiredSkills != null || data.preferredSkills != null || data.tools != null) {
+    return data;
+  }
+
+  if (data.result != null) {
+    var r = data.result;
+    if (typeof r === "string") {
+      var parsed = normalizeParsedBody(stripJsonFence(r));
+      if (parsed && typeof parsed === "object") return parsed;
+      return null;
+    }
+    if (typeof r === "object") {
+      return r;
+    }
+  }
+
+  return null;
 }
 
-async function callTinyfishExtract(goal, target) {
-  var response = await axios.post(
-    TINYFISH_GOAL_API_URL,
-    {
-      goal: goal,
-      target: target,
-    },
-    {
-      headers: {
-        Authorization: "Bearer " + config.TINYFISH_API_KEY.trim(),
-        "Content-Type": "application/json",
-      },
-      timeout: 120000,
-      validateStatus: function () {
-        return true;
-      },
-    }
+function mapPayloadToProfile(payload, role) {
+  if (!payload || typeof payload !== "object") return null;
+
+  var postings = [];
+  if (Array.isArray(payload.postings)) postings = payload.postings;
+  else if (Array.isArray(payload.jobs)) postings = payload.jobs;
+
+  var requiredRanked = asStringArray(
+    getField(payload, "requiredSkills", "required_skills") ||
+      getField(payload, "requiredSkillsRanked", "required_skills_ranked")
   );
-  if (response.status < 200 || response.status >= 300) {
-    return null;
+
+  if (postings.length) {
+    var aggReq = aggregateSkillFrequency(postings, 24);
+    if (aggReq.length) requiredRanked = aggReq;
   }
-  return normalizeParsedBody(response.data);
+
+  var preferred = asStringArray(getField(payload, "preferredSkills", "preferred_skills"));
+  if (!preferred.length && postings.length) {
+    preferred = collectPreferredAcross(postings);
+  }
+
+  var tools = asStringArray(getField(payload, "tools", "common_tools"));
+  if (postings.length) {
+    var aggTools = aggregateToolsFrequency(postings, 16);
+    if (aggTools.length) tools = aggTools;
+  }
+
+  var responsibilities = asStringArray(getField(payload, "responsibilities", "top_responsibilities"));
+  if (postings.length) {
+    var aggResp = topResponsibilitiesAggregated(postings, 5);
+    if (aggResp.length) responsibilities = aggResp;
+  }
+  if (responsibilities.length > 5) {
+    responsibilities = responsibilities.slice(0, 5);
+  }
+
+  var ye = pickYearsEducation(payload, postings);
+
+  var hasUsable =
+    requiredRanked.length > 0 ||
+    preferred.length > 0 ||
+    tools.length > 0 ||
+    responsibilities.length > 0 ||
+    (ye.yearsExperience && ye.yearsExperience.length) ||
+    (ye.education && ye.education.length);
+
+  if (!hasUsable) return null;
+
+  return {
+    jobTitle: role,
+    requiredSkills: requiredRanked,
+    preferredSkills: preferred,
+    responsibilities: responsibilities.slice(0, 5),
+    tools: tools,
+    yearsExperience: ye.yearsExperience || "Varies",
+    education: ye.education || "See postings",
+    scrapedAt: new Date().toISOString(),
+    source: "tinyfish-live",
+  };
 }
 
-/**
- * @param {string|object} input
- * @returns {Promise<object>}
- */
-async function extractJobProfileFromUrl(input) {
-  if (!isTinyfishKeyPresent()) {
-    return getMockJobProfile();
-  }
-
-  var p = normalizeInput(input);
-  var hasContext =
-    Boolean(p.targetRole) || Boolean(p.industry) || Boolean(p.company);
-  var role = p.targetRole || "Professional";
-  var industry = p.industry || "general";
-  var company = p.company || (industry !== "general" ? industry : "leading employers");
-
+async function extractJobProfileFromUrl(roleOrInput) {
   try {
-    if (hasContext) {
-      var goal = buildMultiPostingGoal(role, industry, company);
-      var targetUrl = buildJobSearchTargetUrl(role, industry, company);
-      var parsed = await callTinyfishExtract(goal, targetUrl);
-      if (!parsed) {
-        return getMockJobProfile();
-      }
-      var posts = postingsFromUnwrapped(parsed);
-      if (posts.length < 1) {
-        return getMockJobProfile();
-      }
-      if (posts.length > 10) {
-        posts = posts.slice(0, 10);
-      }
-      var topReq = aggregateByFrequency(posts, collectRequiredFromPost, 15);
-      if (!topReq.length) {
-        return getMockJobProfile();
-      }
-      return buildProfileFromPostings(
-        posts,
-        role,
-        p.industry || industry,
-        p.company,
-        topReq
-      );
+    var role = resolveRole(roleOrInput);
+    console.log('Fetching job profile for:', role);
+
+    const cached = await getCachedJobProfile(role);
+    if (cached) return cached;
+
+    if (!isTinyfishKeyPresent()) {
+      console.log("No Tinyfish key - using mock data");
+      return getMockJobProfile(role);
     }
 
-    if (p.jobUrl) {
-      var one = await callTinyfishExtract(SINGLE_URL_GOAL, p.jobUrl);
-      if (one) {
-        var n = normalizeParsedBody(one) || one;
-        if (n && typeof n === "object" && n.requiredSkills != null) {
-          if (Array.isArray(n.requiredSkills) && n.requiredSkills.length) {
-            return n;
-          }
-        }
-      }
-      return getMockJobProfile();
+    var key = config.TINYFISH_API_KEY.trim();
+
+    console.log('Calling Tinyfish Search API for:', role);
+
+    console.log('Tinyfish Search request params:', {
+      url: TINYFISH_SEARCH_URL,
+      query: role + ' required skills qualifications job ' + new Date().getFullYear()
+    });
+
+    var [result1, result2] = await Promise.all([
+      axios.get(TINYFISH_SEARCH_URL, {
+        headers: { 
+          'X-API-Key': key,
+          'Content-Type': 'application/json'
+        },
+        params: { 
+          query: role + ' required skills qualifications job ' + new Date().getFullYear(),
+          limit: 10
+        },
+        timeout: 15000
+      }),
+      axios.get(TINYFISH_SEARCH_URL, {
+        headers: { 
+          'X-API-Key': key,
+          'Content-Type': 'application/json'
+        },
+        params: { 
+          query: role + ' job description tools experience requirements ' + new Date().getFullYear(),
+          limit: 10
+        },
+        timeout: 15000
+      })
+    ]);
+
+    console.log('Tinyfish Search status:', result1.status, result2.status);
+
+    var allResults = [
+      ...(result1.data?.results || []),
+      ...(result2.data?.results || [])
+    ];
+
+    console.log('Tinyfish Search returned:', allResults.length, 'results');
+
+    var skillKeywords = [
+      "Python","SQL","Excel","Tableau","Power BI","PowerBI","R",
+      "Java","JavaScript","TypeScript","React","Node","AWS","Azure",
+      "GCP","Docker","Kubernetes","Git","Figma","Sketch","Jira",
+      "Confluence","Salesforce","HubSpot","Google Analytics",
+      "Machine Learning","Deep Learning","TensorFlow","PyTorch",
+      "Statistics","Data Analysis","Data Visualization",
+      "Communication","Leadership","Project Management",
+      "Agile","Scrum","Product Management","User Research",
+      "Financial Modeling","PowerPoint","A/B Testing",
+      "SEO","SEM","Marketing Analytics","Excel","Pandas",
+      "NumPy","Spark","Hadoop","Kafka","MongoDB","PostgreSQL",
+      "MySQL","REST API","GraphQL","CI/CD","Linux","Bash"
+    ];
+
+    var skillCounts = {};
+    skillKeywords.forEach(s => { skillCounts[s] = 0; });
+
+    var allText = allResults.map(r => 
+      (r.title || '') + ' ' + 
+      (r.snippet || '')
+    ).join(' ').toLowerCase();
+
+    console.log('Sample result:', JSON.stringify(allResults[0]));
+    console.log('Combined text sample:', allText.substring(0, 200));
+
+    console.log('Combined text length:', allText.length);
+
+    skillKeywords.forEach(skill => {
+      var regex = new RegExp(skill.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      var matches = allText.match(regex);
+      if (matches) skillCounts[skill] = matches.length;
+    });
+
+    var ranked = Object.entries(skillCounts)
+      .filter(([s, n]) => n > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([s]) => s);
+
+    console.log('Skills found:', ranked.slice(0, 10));
+
+    if (ranked.length === 0) {
+      console.log('No skills extracted - using mock');
+      return getMockJobProfile(role);
     }
+
+    const result = {
+      jobTitle: role,
+      requiredSkills: ranked.slice(0, 6),
+      preferredSkills: ranked.slice(6, 10),
+      responsibilities: [
+        "Analyze data and present insights to stakeholders",
+        "Collaborate with cross-functional teams",
+        "Build and maintain dashboards and reports",
+        "Identify trends and opportunities",
+        "Support business decision making"
+      ],
+      tools: ranked.filter(s => 
+        ["Excel","Tableau","PowerBI","Figma","Jira","Git",
+         "Docker","AWS","Azure","Salesforce","HubSpot"].includes(s)
+      ).slice(0, 5),
+      yearsExperience: "2-4 years",
+      education: "Bachelor degree required",
+      scrapedAt: new Date().toISOString(),
+      source: "tinyfish-search"
+    };
+
+    await setCachedJobProfile(role, result);
+    return result;
+
   } catch (err) {
-    return getMockJobProfile();
+    console.log('Tinyfish Search error:', err.message);
+    console.log('Tinyfish error status:', err.response?.status);
+    console.log('Tinyfish error body:', JSON.stringify(err.response?.data));
+    console.log('Tinyfish request URL was:', err.config?.url);
+    console.log('Tinyfish request params were:', JSON.stringify(err.config?.params));
+    console.log('Tinyfish request headers were:', JSON.stringify(err.config?.headers));
+    console.log("Tinyfish unavailable - using mock data");
+    return getMockJobProfile(resolveRole(roleOrInput));
   }
-
-  return getMockJobProfile();
 }
 
 module.exports = {
   extractJobProfileFromUrl,
+  getMockJobProfile: getMockJobProfile,
 };
