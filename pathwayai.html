@@ -2473,6 +2473,35 @@
     }
     return c.functions.invoke(slug, { body: body || {} });
   }
+  /** POST to Cloudflare Workers /api/* — returns InsForge-shaped { data, error } for unchanged callers. */
+  async function pathwayaiWorkersApiPost(apiPath, body) {
+    try {
+      var res = await fetch(apiPath, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body || {})
+      });
+      var parsed = null;
+      try {
+        parsed = await res.json();
+      } catch (e2) {
+        parsed = null;
+      }
+      if (!res.ok) {
+        var msg =
+          parsed && typeof parsed.error === "string"
+            ? parsed.error
+            : res.statusText || "HTTP " + res.status;
+        return { error: { message: String(msg) }, data: null };
+      }
+      return { data: parsed, error: null };
+    } catch (e) {
+      return {
+        error: { message: e && e.message ? e.message : String(e) },
+        data: null
+      };
+    }
+  }
   async function uploadResumeFileToInsforgeStorage(file) {
     if (!file) return null;
     try {
@@ -2493,7 +2522,9 @@
   async function tryEnrichParseWithInsforgeServer(resumeText, localParsed) {
     if (!resumeText || String(resumeText).length < 8) return localParsed;
     try {
-      var r = await pathwayaiInsforgeInvoke("parse-resume", { resumeText: String(resumeText).slice(0, 50000) });
+      var r = await pathwayaiWorkersApiPost("/api/parse-resume", {
+        resumeText: String(resumeText).slice(0, 50000)
+      });
       if (r && r.error) return localParsed;
       var d = r && r.data;
       if (!d || typeof d !== "object") return localParsed;
@@ -2515,7 +2546,7 @@
     } catch (e) {}
     if (!tok) return;
     try {
-      pathwayaiInsforgeInvoke("save-progress", {
+      pathwayaiWorkersApiPost("/api/save-progress", {
         userId: getOrCreateSessionUserId(),
         moduleId: String(moduleName),
         lessonIndex: lessonIdx,
@@ -6658,7 +6689,7 @@ function startScanSequence() {
       });
       console.log('Calling backend with companies:', 
         dreamCompanies)
-      var out = await pathwayaiInsforgeInvoke("analyze-gap", apiPayload);
+      var out = await pathwayaiWorkersApiPost("/api/analyze-gap", apiPayload);
       if (out && out.error) {
         throw new Error(out.error.message || "insforge");
       }
