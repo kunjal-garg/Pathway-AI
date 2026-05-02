@@ -7014,9 +7014,18 @@ function startScanSequence() {
   }
 
   function youtubeCardsForLesson(moduleName, lessonIdx) {
-    // Use AI-generated YouTube query if available
     if (state._aiModules && state._aiModules[moduleName]) {
       var aiLesson = state._aiModules[moduleName].lessons && state._aiModules[moduleName].lessons[lessonIdx];
+      if (aiLesson && Array.isArray(aiLesson.youtubeVideos) && aiLesson.youtubeVideos.length) {
+        return aiLesson.youtubeVideos.map(function (v) {
+          return {
+            title: v.title,
+            url: v.url,
+            channel: v.channel || "",
+            dur: v.duration != null ? String(v.duration) : (v.dur != null ? String(v.dur) : "")
+          };
+        });
+      }
       if (aiLesson && aiLesson.youtubeQuery) {
         return [{
           title: aiLesson.youtubeQuery,
@@ -7391,17 +7400,19 @@ function startScanSequence() {
     var prevDis = lessonIdx <= 0 ? " disabled style=\"opacity:0.45\"" : "";
     var nextDis = lessonIdx >= 4 ? " disabled style=\"opacity:0.45\"" : "";
     var quizBlock = "";
+    var quizAnswers = null;
+    var qsQuizRef = null;
     if (lessonIdx === 4 && state._aiModules && state._aiModules[moduleName] && state._aiModules[moduleName].quizQuestions && state._aiModules[moduleName].quizQuestions.length) {
-      var qsQuiz = state._aiModules[moduleName].quizQuestions;
-      var idSafe = String(moduleName).replace(/[^a-zA-Z0-9_-]/g, "_");
-      quizBlock = "<div style=\"margin-top:1.25rem;padding:1rem;border-radius:8px;background:var(--card-bg);border:1px solid rgba(255,255,255,0.08);\">" +
+      qsQuizRef = state._aiModules[moduleName].quizQuestions;
+      quizAnswers = qsQuizRef.map(function () { return null; });
+      quizBlock = "<div id=\"module-quiz-root\" style=\"margin-top:1.25rem;padding:1rem;border-radius:8px;background:var(--card-bg);border:1px solid rgba(255,255,255,0.08);\">" +
         "<h4 style=\"font-size:0.95rem;margin:0 0 0.75rem;color:var(--cyan);\">Module quiz</h4>";
-      for (var qi = 0; qi < qsQuiz.length; qi++) {
-        var qItem = qsQuiz[qi];
+      for (var qi = 0; qi < qsQuizRef.length; qi++) {
+        var qItem = qsQuizRef[qi];
         if (!qItem || !qItem.options || !qItem.options.length) continue;
-        quizBlock += "<div style=\"margin-bottom:1rem;\"><p style=\"margin:0 0 0.5rem;font-weight:600;color:var(--text-muted);\">" + escapeHtml(qItem.question) + "</p>";
+        quizBlock += "<div data-quiz-section=\"" + qi + "\" style=\"margin-bottom:1rem;\"><p style=\"margin:0 0 0.5rem;font-weight:700;color:var(--text-muted);\">" + escapeHtml(qItem.question) + "</p>";
         for (var oi = 0; oi < qItem.options.length; oi++) {
-          quizBlock += "<label style=\"display:block;margin:0.25rem 0;cursor:pointer;color:var(--text-muted);\"><input type=\"radio\" name=\"quiz-" + idSafe + "-" + qi + "\" value=\"" + oi + "\" style=\"margin-right:0.5rem;\" /> " + escapeHtml(qItem.options[oi]) + "</label>";
+          quizBlock += "<div tabindex=\"0\" role=\"button\" data-quiz-q=\"" + qi + "\" data-quiz-o=\"" + oi + "\" style=\"padding:10px 14px;border-radius:8px;cursor:pointer;margin-bottom:6px;background:var(--card-bg);border:1.5px solid transparent;color:var(--text-muted);\">" + escapeHtml(qItem.options[oi]) + "</div>";
         }
         quizBlock += "</div>";
       }
@@ -7449,19 +7460,40 @@ function startScanSequence() {
       }
     });
     var quizSubmitBtn = document.getElementById("btn-module-quiz-submit");
-    if (quizSubmitBtn && lessonIdx === 4 && state._aiModules && state._aiModules[moduleName] && state._aiModules[moduleName].quizQuestions && state._aiModules[moduleName].quizQuestions.length) {
-      var qsRef = state._aiModules[moduleName].quizQuestions;
-      var idSafeQuiz = String(moduleName).replace(/[^a-zA-Z0-9_-]/g, "_");
+    var quizRootEl = document.getElementById("module-quiz-root");
+    if (quizRootEl && quizAnswers && qsQuizRef && quizAnswers.length === qsQuizRef.length) {
+      quizRootEl.addEventListener("click", function (ev) {
+        var opt = ev.target.closest("[data-quiz-q][data-quiz-o]");
+        if (!opt || !quizRootEl.contains(opt)) return;
+        var qi = parseInt(opt.getAttribute("data-quiz-q"), 10);
+        var oi = parseInt(opt.getAttribute("data-quiz-o"), 10);
+        if (isNaN(qi) || isNaN(oi)) return;
+        var sec = opt.closest("[data-quiz-section]");
+        if (!sec) return;
+        var siblings = sec.querySelectorAll("[data-quiz-q][data-quiz-o]");
+        for (var si = 0; si < siblings.length; si++) {
+          siblings[si].style.border = "1.5px solid transparent";
+        }
+        opt.style.border = "1.5px solid var(--cyan)";
+        quizAnswers[qi] = oi;
+      });
+    }
+    if (quizSubmitBtn && qsQuizRef && qsQuizRef.length && quizAnswers) {
       quizSubmitBtn.addEventListener("click", function () {
+        var resultEl = document.getElementById("module-quiz-result");
+        for (var vi = 0; vi < qsQuizRef.length; vi++) {
+          if (quizAnswers[vi] === null || quizAnswers[vi] === undefined) {
+            if (resultEl) resultEl.textContent = "Please answer all questions";
+            return;
+          }
+        }
         var correct = 0;
-        var total = qsRef.length;
-        for (var qix = 0; qix < qsRef.length; qix++) {
-          var sel = document.querySelector("input[name=\"quiz-" + idSafeQuiz + "-" + qix + "\"]:checked");
-          var picked = sel ? parseInt(sel.value, 10) : null;
-          var exp = qsRef[qix].correctIndex;
+        var total = qsQuizRef.length;
+        for (var qix = 0; qix < qsQuizRef.length; qix++) {
+          var picked = quizAnswers[qix];
+          var exp = qsQuizRef[qix].correctIndex;
           if (picked === exp) correct++;
         }
-        var resultEl = document.getElementById("module-quiz-result");
         var pass = correct >= 2;
         var msg = pass ? "Great work! Module complete." : "We'll add a recovery module to your dashboard";
         if (!pass) {
@@ -7830,13 +7862,91 @@ function startScanSequence() {
     ];
   }
 
+  var MOCK_SKILL_YOUTUBE_VIDEOS = {
+    "DevOps & Reliability": [
+      [{ title: "DevOps explained in 8 minutes", url: "https://www.youtube.com/watch?v=0yWAtQ6wYNM", channel: "TechWorld with Nana", duration: "8 min" }],
+      [{ title: "Docker Tutorial for Beginners", url: "https://www.youtube.com/watch?v=3c-iBn73dDE", channel: "TechWorld with Nana", duration: "2 hrs" }],
+      [{ title: "GitHub Actions CI/CD Tutorial", url: "https://www.youtube.com/watch?v=R8_veQiYBjI", channel: "TechWorld with Nana", duration: "32 min" }],
+      [{ title: "Kubernetes Tutorial for Beginners", url: "https://www.youtube.com/watch?v=X48VuDVv0do", channel: "TechWorld with Nana", duration: "4 hrs" }],
+      [{ title: "Terraform Course for Beginners", url: "https://www.youtube.com/watch?v=SLB_c_ayRMo", channel: "freeCodeCamp", duration: "2.5 hrs" }]
+    ],
+    "Data Structures": [
+      [{ title: "Data Structures Easy to Advanced", url: "https://www.youtube.com/watch?v=RBSGKlAvoiM", channel: "freeCodeCamp", duration: "8 hrs" }],
+      [{ title: "Big O Notation - Full Course", url: "https://www.youtube.com/watch?v=Mo4vesaut8g", channel: "freeCodeCamp", duration: "2 hrs" }],
+      [{ title: "Dynamic Programming - Learn to Solve Problems", url: "https://www.youtube.com/watch?v=oBt53YbR9Kk", channel: "freeCodeCamp", duration: "5 hrs" }],
+      [{ title: "LeetCode was HARD until I learned these 15 patterns", url: "https://www.youtube.com/watch?v=DjYZk8nrXVY", channel: "Ashish Pratap Singh", duration: "13 min" }],
+      [{ title: "Graph Algorithms for Technical Interviews", url: "https://www.youtube.com/watch?v=tWVWeAqZ0WU", channel: "freeCodeCamp", duration: "2.5 hrs" }]
+    ],
+    "System Design": [
+      [{ title: "System Design for Beginners", url: "https://www.youtube.com/watch?v=MbjObHmDbZo", channel: "freeCodeCamp", duration: "1 hr" }],
+      [{ title: "CAP Theorem Explained", url: "https://www.youtube.com/watch?v=BHqjEjzAicA", channel: "ByteByteGo", duration: "8 min" }],
+      [{ title: "Design a URL Shortener", url: "https://www.youtube.com/watch?v=fMZMm_0ZhK4", channel: "Gaurav Sen", duration: "15 min" }],
+      [{ title: "Microservices explained", url: "https://www.youtube.com/watch?v=rv4LlmLmVWk", channel: "TechWorld with Nana", duration: "20 min" }],
+      [{ title: "System Design Interview - Step By Step Guide", url: "https://www.youtube.com/watch?v=i7twT3x5yv8", channel: "interviewing.io", duration: "30 min" }]
+    ],
+    "SQL & Data Modeling": [
+      [{ title: "SQL Tutorial - Full Database Course", url: "https://www.youtube.com/watch?v=HXV3zeQKqGY", channel: "freeCodeCamp", duration: "4.5 hrs" }],
+      [{ title: "SQL Joins explained", url: "https://www.youtube.com/watch?v=9yeOJ0ZMUYw", channel: "Socratica", duration: "8 min" }],
+      [{ title: "SQL Window Functions", url: "https://www.youtube.com/watch?v=H6OTMoXjNiM", channel: "Kudvenkat", duration: "20 min" }],
+      [{ title: "Database Design Course", url: "https://www.youtube.com/watch?v=ztHopE5Wnpc", channel: "freeCodeCamp", duration: "8 hrs" }],
+      [{ title: "dbt Tutorial", url: "https://www.youtube.com/watch?v=5rNquRnNb4E", channel: "Kahan Data Solutions", duration: "45 min" }]
+    ],
+    "Machine Learning Basics": [
+      [{ title: "Machine Learning for Everybody", url: "https://www.youtube.com/watch?v=i_LwzRVP7bg", channel: "freeCodeCamp", duration: "3.5 hrs" }],
+      [{ title: "Gradient Descent explained", url: "https://www.youtube.com/watch?v=IHZwWFHWa-w", channel: "3Blue1Brown", duration: "21 min" }],
+      [{ title: "Python Machine Learning Tutorial", url: "https://www.youtube.com/watch?v=7eh4d6sabA0", channel: "Programming with Mosh", duration: "1 hr" }],
+      [{ title: "XGBoost explained", url: "https://www.youtube.com/watch?v=OtD8wVaFm6E", channel: "StatQuest", duration: "25 min" }],
+      [{ title: "MLOps explained", url: "https://www.youtube.com/watch?v=LdLFJUlPa4Y", channel: "TechWorld with Nana", duration: "45 min" }]
+    ],
+    "Statistics": [
+      [{ title: "Statistics - Full University Course", url: "https://www.youtube.com/watch?v=xxpc-HPKN28", channel: "freeCodeCamp", duration: "8 hrs" }],
+      [{ title: "Hypothesis Testing explained", url: "https://www.youtube.com/watch?v=0zZYBALbZgg", channel: "CrashCourse", duration: "12 min" }],
+      [{ title: "A/B Testing explained", url: "https://www.youtube.com/watch?v=VPN4LxRLb8I", channel: "Google", duration: "7 min" }],
+      [{ title: "Probability explained", url: "https://www.youtube.com/watch?v=uzkc-qNVoOk", channel: "Khan Academy", duration: "10 min" }],
+      [{ title: "Statistics for Data Science", url: "https://www.youtube.com/watch?v=xxpc-HPKN28", channel: "freeCodeCamp", duration: "8 hrs" }]
+    ],
+    "Code Quality": [
+      [{ title: "Clean Code - Uncle Bob lessons", url: "https://www.youtube.com/watch?v=7EmboKQH8lM", channel: "UnityCoin", duration: "1 hr" }],
+      [{ title: "SOLID Principles explained", url: "https://www.youtube.com/watch?v=_jDNAkmsdFg", channel: "ArjanCodes", duration: "1 hr" }],
+      [{ title: "Test Driven Development", url: "https://www.youtube.com/watch?v=B1j6k2j2eJg", channel: "freeCodeCamp", duration: "30 min" }],
+      [{ title: "Code Review Best Practices", url: "https://www.youtube.com/watch?v=a9_0UUUNt-Y", channel: "Google", duration: "50 min" }],
+      [{ title: "Refactoring techniques", url: "https://www.youtube.com/watch?v=vqEg37e4Mkw", channel: "Continuous Delivery", duration: "20 min" }]
+    ],
+    "Visualization": [
+      [{ title: "Tableau for Beginners", url: "https://www.youtube.com/watch?v=TPMlZxRRaBQ", channel: "Simplilearn", duration: "1 hr" }],
+      [{ title: "Power BI Tutorial for Beginners", url: "https://www.youtube.com/watch?v=AGrl-H87pRU", channel: "Guy in a Cube", duration: "1 hr" }],
+      [{ title: "Data Visualization best practices", url: "https://www.youtube.com/watch?v=hVimVzgtD6w", channel: "Google", duration: "10 min" }],
+      [{ title: "Python Matplotlib full course", url: "https://www.youtube.com/watch?v=OZOOLe2imFo", channel: "freeCodeCamp", duration: "1 hr" }],
+      [{ title: "D3.js Tutorial", url: "https://www.youtube.com/watch?v=_8V5o2UHG0E", channel: "freeCodeCamp", duration: "8 hrs" }]
+    ],
+    "Collaboration": [
+      [{ title: "Agile methodology explained", url: "https://www.youtube.com/watch?v=502ILHjX9EE", channel: "Google", duration: "10 min" }],
+      [{ title: "Git and GitHub full course", url: "https://www.youtube.com/watch?v=RGOj5yH7evk", channel: "freeCodeCamp", duration: "1 hr" }],
+      [{ title: "Jira tutorial for beginners", url: "https://www.youtube.com/watch?v=uM_m6EzMg3k", channel: "Simplilearn", duration: "30 min" }],
+      [{ title: "How to give and receive feedback", url: "https://www.youtube.com/watch?v=wtl5UrrgU8c", channel: "Google", duration: "8 min" }],
+      [{ title: "Remote team collaboration tips", url: "https://www.youtube.com/watch?v=oiUyyZPIHyY", channel: "Google", duration: "12 min" }]
+    ]
+  };
+
+  function mockYoutubeVideosForLesson(skillName, lessonIdx) {
+    var table = MOCK_SKILL_YOUTUBE_VIDEOS[skillName];
+    if (table && table[lessonIdx] && table[lessonIdx].length) {
+      return table[lessonIdx].map(function (v) {
+        return { title: v.title, url: v.url, channel: v.channel, duration: v.duration };
+      });
+    }
+    var nm = String(skillName || "Skill");
+    var label = LESSON_NAV_LABELS[lessonIdx] || "tutorial";
+    var q = nm + " " + label + " tutorial";
+    return [{ title: q, url: ytSearchUrl(q), channel: "YouTube search", duration: "Search results" }];
+  }
+
   function buildMockAIModules(role, skills) {
     var r = role || "your target role";
     if (!skills || !skills.length) return [];
     return skills.map(function (sk) {
       var nm = String(sk.name || "Skill").trim() || "Skill";
       var resUrl = mockResourceUrlForSkill(nm);
-      var ytQ = nm + " tutorial for beginners freeCodeCamp 2024";
       var lessons = [
         {
           title: "Why This Matters",
@@ -7854,7 +7964,7 @@ function startScanSequence() {
           resourceUrl: resUrl,
           resourceName: "Primary learning path",
           resourceDesc: "Curated roadmap and references aligned with building " + nm + ".",
-          youtubeQuery: ytQ
+          youtubeVideos: mockYoutubeVideosForLesson(nm, 0)
         },
         {
           title: "Core Concepts",
@@ -7872,7 +7982,7 @@ function startScanSequence() {
           resourceUrl: resUrl,
           resourceName: "Core reference",
           resourceDesc: "Official or canonical material for concepts behind " + nm + ".",
-          youtubeQuery: ytQ
+          youtubeVideos: mockYoutubeVideosForLesson(nm, 1)
         },
         {
           title: "See It In Action",
@@ -7886,11 +7996,11 @@ function startScanSequence() {
             "Pause at each handoff and name the owner and artifact produced.",
             "Track one metric that would prove the workflow succeeded."
           ],
-          practice: "Search YouTube with this query, watch 15 minutes, and summarize three steps you would replicate this week: \"" + ytQ + "\".",
+          practice: "Watch the recommended video for this lesson for at least 15 minutes, then summarize three concrete steps you would replicate this week.",
           resourceUrl: resUrl,
           resourceName: "Worked examples",
           resourceDesc: "See real patterns applied before you practice hands-on.",
-          youtubeQuery: ytQ
+          youtubeVideos: mockYoutubeVideosForLesson(nm, 2)
         },
         {
           title: "Hands-On Practice",
@@ -7908,7 +8018,7 @@ function startScanSequence() {
           resourceUrl: resUrl,
           resourceName: "Hands-on lab",
           resourceDesc: "Step-by-step task you can finish in under an hour.",
-          youtubeQuery: ytQ
+          youtubeVideos: mockYoutubeVideosForLesson(nm, 3)
         },
         {
           title: "Check Your Understanding",
@@ -7926,7 +8036,7 @@ function startScanSequence() {
           resourceUrl: resUrl,
           resourceName: "Review material",
           resourceDesc: "Sanity-check understanding before interviews.",
-          youtubeQuery: ytQ
+          youtubeVideos: mockYoutubeVideosForLesson(nm, 4)
         }
       ];
       return {
