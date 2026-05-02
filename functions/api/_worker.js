@@ -9,6 +9,259 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type",
 };
 
+function isBlankResumeField(v) {
+  if (v == null) return true;
+  const s = String(v).trim();
+  return s === "" || s.toLowerCase() === "null";
+}
+
+/** Strip GPT artifacts like "at null" and ", null" from a single display line. */
+function cleanResumeLineString(str) {
+  if (!str || typeof str !== "string") return "";
+  let t = str.replace(/\bat\s+null\b/gi, "").trim();
+  t = t
+    .split(",")
+    .map(function (p) {
+      return p.trim();
+    })
+    .filter(function (p) {
+      return p && p.toLowerCase() !== "null";
+    })
+    .join(", ");
+  t = t.replace(/\s{2,}/g, " ").replace(/^\s*,\s*/, "").replace(/,\s*$/, "").trim();
+  return t;
+}
+
+function pickNonBlank(v) {
+  if (isBlankResumeField(v)) return null;
+  return String(v).trim();
+}
+
+/** Null-safe display string from an experience object (legacy helper). */
+function formatExperienceEntry(item) {
+  if (item == null) return "";
+  if (typeof item === "string") {
+    return cleanResumeLineString(item);
+  }
+  if (typeof item === "object") {
+    var roleStr =
+      pickNonBlank(item.title) ||
+      pickNonBlank(item.role) ||
+      pickNonBlank(item.position) ||
+      pickNonBlank(item.jobTitle) ||
+      "";
+    var companyStr =
+      pickNonBlank(item.company) ||
+      pickNonBlank(item.employer) ||
+      pickNonBlank(item.organization) ||
+      "";
+    var startStr =
+      pickNonBlank(item.start) || pickNonBlank(item.startDate) || "";
+    var endStr = pickNonBlank(item.end) || pickNonBlank(item.endDate) || "";
+    var dates =
+      item.duration ||
+      item.dates ||
+      item.date ||
+      item.period ||
+      "";
+    var dateStr = "";
+    if (startStr && endStr) {
+      dateStr = startStr + "-" + endStr;
+    } else if (startStr || endStr) {
+      dateStr = startStr || endStr;
+    } else if (!isBlankResumeField(dates)) {
+      dateStr = String(dates).trim();
+    }
+    var head =
+      roleStr && companyStr
+        ? roleStr + " at " + companyStr
+        : roleStr || companyStr;
+    if (!head) return dateStr || "";
+    if (!dateStr) return head;
+    return head + ", " + dateStr;
+  }
+  return "";
+}
+
+/** Null-safe display string from an education object (legacy helper). */
+function formatEducationEntry(item) {
+  if (item == null) return "";
+  if (typeof item === "string") {
+    return cleanResumeLineString(item);
+  }
+  if (typeof item === "object") {
+    var degStr =
+      pickNonBlank(item.degree) ||
+      pickNonBlank(item.title) ||
+      pickNonBlank(item.program) ||
+      pickNonBlank(item.field) ||
+      pickNonBlank(item.major) ||
+      "";
+    var schoolStr =
+      pickNonBlank(item.institution) ||
+      pickNonBlank(item.school) ||
+      pickNonBlank(item.university) ||
+      pickNonBlank(item.college) ||
+      "";
+    var whenStr =
+      pickNonBlank(item.year) ||
+      pickNonBlank(item.years) ||
+      pickNonBlank(item.dates) ||
+      pickNonBlank(item.date) ||
+      pickNonBlank(item.graduation) ||
+      pickNonBlank(item.gpa) ||
+      "";
+    var parts = [];
+    if (degStr && schoolStr) {
+      parts.push(degStr + " at " + schoolStr);
+    } else if (degStr || schoolStr) {
+      parts.push(degStr || schoolStr);
+    }
+    if (whenStr) parts.push(whenStr);
+    return parts.join(", ");
+  }
+  return "";
+}
+
+function normalizeExperienceEntry(item) {
+  if (item == null) return null;
+  if (typeof item === "string") {
+    var s = cleanResumeLineString(item);
+    return s
+      ? {
+          title: s,
+          company: null,
+          start: null,
+          end: null,
+          bullets: [],
+        }
+      : null;
+  }
+  if (typeof item !== "object" || Array.isArray(item)) return null;
+
+  var title =
+    pickNonBlank(item.title) ||
+    pickNonBlank(item.role) ||
+    pickNonBlank(item.position) ||
+    pickNonBlank(item.jobTitle);
+  var company =
+    pickNonBlank(item.company) ||
+    pickNonBlank(item.employer) ||
+    pickNonBlank(item.organization);
+  var start = pickNonBlank(item.start) || pickNonBlank(item.startDate);
+  var end = pickNonBlank(item.end) || pickNonBlank(item.endDate);
+
+  if (!start && !end) {
+    var legacyDates =
+      item.duration ||
+      item.dates ||
+      item.date ||
+      item.period;
+    if (!isBlankResumeField(legacyDates)) {
+      end = String(legacyDates).trim();
+    }
+  }
+
+  var bullets = [];
+  if (Array.isArray(item.bullets)) {
+    bullets = item.bullets
+      .map(function (b) {
+        return b != null ? String(b).trim() : "";
+      })
+      .filter(function (b) {
+        return b && b.toLowerCase() !== "null";
+      })
+      .slice(0, 3);
+  }
+
+  if (!title && !company && !bullets.length) return null;
+
+  return {
+    title: title || null,
+    company: company,
+    start: start,
+    end: end,
+    bullets: bullets,
+  };
+}
+
+function normalizeEducationEntry(item) {
+  if (item == null) return null;
+  if (typeof item === "string") {
+    var es = cleanResumeLineString(item);
+    return es
+      ? { degree: es, institution: null, year: null }
+      : null;
+  }
+  if (typeof item !== "object" || Array.isArray(item)) return null;
+
+  var degree =
+    pickNonBlank(item.degree) ||
+    pickNonBlank(item.title) ||
+    pickNonBlank(item.program) ||
+    pickNonBlank(item.field) ||
+    pickNonBlank(item.major);
+  var institution =
+    pickNonBlank(item.institution) ||
+    pickNonBlank(item.school) ||
+    pickNonBlank(item.university) ||
+    pickNonBlank(item.college);
+  var year =
+    pickNonBlank(item.year) ||
+    pickNonBlank(item.years) ||
+    pickNonBlank(item.dates) ||
+    pickNonBlank(item.date) ||
+    pickNonBlank(item.graduation);
+
+  if (!degree && !institution && !year) return null;
+
+  return {
+    degree: degree || null,
+    institution: institution,
+    year: year,
+  };
+}
+
+/** Normalize experience/education arrays in parsed resume JSON (null-safe strings). */
+function normalizeParseResumeAiJson(resultStr) {
+  if (!resultStr || typeof resultStr !== "string") return resultStr;
+  var parsed;
+  try {
+    parsed = JSON.parse(resultStr);
+  } catch (e) {
+    return resultStr;
+  }
+  if (!parsed || typeof parsed !== "object") return resultStr;
+  if (Array.isArray(parsed.experience)) {
+    parsed.experience = parsed.experience
+      .map(normalizeExperienceEntry)
+      .filter(function (x) {
+        return x != null;
+      });
+  }
+  if (Array.isArray(parsed.education)) {
+    parsed.education = parsed.education
+      .map(normalizeEducationEntry)
+      .filter(function (x) {
+        return x != null;
+      });
+  }
+  if (Array.isArray(parsed.skills)) {
+    parsed.skills = parsed.skills
+      .map(function (s) {
+        return s != null ? String(s).trim() : "";
+      })
+      .filter(function (s) {
+        return s && s.toLowerCase() !== "null";
+      });
+  }
+  try {
+    return JSON.stringify(parsed);
+  } catch (e) {
+    return resultStr;
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -68,6 +321,19 @@ export default {
         });
       }
 
+      function cleanResumeText(raw) {
+        return raw
+          .replace(/[ \t]{2,}/g, " ")
+          .replace(/\n{3,}/g, "\n\n")
+          .replace(/[^\S\n]+$/gm, "")
+          .replace(/(\w)\n(\w)/g, "$1 $2")
+          .replace(/[\u2022\u2023\u25E6\u2043\u2219]/g, "-")
+          .trim()
+          .slice(0, 8000);
+      }
+
+      const cleanedResume = cleanResumeText(resumeText);
+
       const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
@@ -76,33 +342,48 @@ export default {
         },
         body: JSON.stringify({
           model: "gpt-4o-mini",
-          max_tokens: 1200,
+          max_tokens: 2000,
           messages: [
             {
               role: "system",
               content:
-                "You are a resume parser. Always respond with raw JSON only. No markdown, no backticks, no explanation. Never include section header words like EDUCATION, EXPERIENCE, SKILLS, PROJECTS in the values.",
+                "You are a resume parser. Extract structured data from resumes and return ONLY a raw JSON object. No markdown, no backticks, no explanation, no section header words (EDUCATION, EXPERIENCE, SKILLS etc) in values.\nIf a field cannot be found, return null for scalars and [] for arrays.\nNever invent or assume information not present in the resume.",
             },
             {
               role: "user",
-              content: `Extract structured information from this resume.
-Return ONLY this exact JSON format, nothing else:
+              content: `Parse this resume into the following JSON schema exactly:
+
 {
-  "name": "Full name or null",
-  "education": ["MS Business Analytics at SFSU, 2025-2027"],
-  "experience": ["Software Engineer at Google, Jun 2023 - Present"],
-  "projects": ["Project name"],
-  "skills": ["Skill1", "Skill2"]
+  "name": "full name as written",
+  "email": "email address or null",
+  "phone": "phone number or null",
+  "education": [{ "degree": "", "institution": "", "year": "" }],
+  "experience": [{
+    "title": "job title",
+    "company": "company name or null",
+    "start": "start year or null",
+    "end": "end year or null, use present if current role",
+    "bullets": ["key responsibility or achievement, max 3"]
+  }],
+  "projects": [{
+    "name": "project name",
+    "tech": ["technologies used"],
+    "description": "one sentence"
+  }],
+  "skills": ["skill1", "skill2"]
 }
 
 Rules:
-- education: up to 3 entries; each value like "MS Business Analytics at SFSU, 2025-2027" (degree at school, years or GPA when known)
-- experience: up to 4 entries; each value like "Software Engineer at Google, Jun 2023 - Present" (title at company, date range), no bullets
-- projects: up to 4 entries; only the project name, nothing else
-- skills: up to 12 top technical skills
+- skills must be a flat array of individual skill strings, never a category object
+- bullets: max 3 per role, only concrete achievements or responsibilities
+- degree: include the full degree name e.g. 'B.S. Computer Science', 
+  not just the abbreviation or just the field name
+- If the resume is noisy or poorly formatted, normalize it as best you can
+- Never use null inside an array, use [] if nothing found
+- Never invent information not present in the resume
 
 Resume:
-${resumeText.slice(0, 3000)}`,
+${cleanedResume}`,
             },
           ],
         }),
@@ -135,7 +416,9 @@ ${resumeText.slice(0, 3000)}`,
           ? String(aiData.choices[0].message.content).trim()
           : "";
 
-      return new Response(JSON.stringify({ result }), {
+      const normalized = normalizeParseResumeAiJson(result);
+
+      return new Response(JSON.stringify({ result: normalized }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
