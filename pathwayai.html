@@ -3018,6 +3018,23 @@
       return null;
     }
   }
+  function resetScreen4UploadVisualOnly() {
+    var drop = document.getElementById("resume-drop");
+    if (drop) {
+      drop.textContent = "Drop your PDF or Word file here or click to browse";
+    }
+    var ui = document.getElementById("resume-parse-ui");
+    if (ui) ui.style.display = "none";
+    var st = document.getElementById("resume-parse-status");
+    if (st) st.textContent = "";
+    var sp = document.getElementById("resume-parse-spinner");
+    if (sp) {
+      sp.style.display = "none";
+      sp.style.borderColor = "";
+      sp.style.borderTopColor = "";
+    }
+    try { state._resumeFileLabel = null; } catch (e) {}
+  }
   function resetScreen4ResumeUi() {
     var drop = document.getElementById("resume-drop");
     if (drop) {
@@ -3029,7 +3046,7 @@
     if (st) st.textContent = "Reading your resume…";
     var sp = document.getElementById("resume-parse-spinner");
     if (sp) {
-      sp.style.display = "block";
+      sp.style.display = "none";
       sp.style.borderColor = "";
       sp.style.borderTopColor = "";
     }
@@ -3082,14 +3099,10 @@
         (rp.name && String(rp.name).trim()) ||
         (rp.displayName && String(rp.displayName).trim()) ||
         rp.linkedInExport;
-      if (hasPayload || (state._resumeFileLabel && typeof rp === "object")) {
+      if (state._resumeFileLabel && hasPayload) {
       var drop2 = document.getElementById("resume-drop");
       if (drop2) {
-        if (state._resumeFileLabel) {
-          drop2.textContent = "Selected: " + state._resumeFileLabel;
-        } else {
-          drop2.textContent = "Selected: resume";
-        }
+        drop2.textContent = "Selected: " + state._resumeFileLabel;
       }
       var ui2 = document.getElementById("resume-parse-ui");
       if (ui2) ui2.style.display = "flex";
@@ -3323,6 +3336,12 @@ function assessmentMatchesSession(c) {
       state.persistedDashboard = null;
     }
 
+    var prevActiveScreen = null;
+    screens.forEach(function (sid) {
+      var elPrev = document.getElementById(sid);
+      if (elPrev && elPrev.classList.contains("active")) prevActiveScreen = sid;
+    });
+
     screens.forEach(function (sid) {
       const el = document.getElementById(sid);
       if (!el) return;
@@ -3340,7 +3359,12 @@ function assessmentMatchesSession(c) {
 
     if (id === "screen-2") syncGoalFormFromState();
     if (id === "screen-3") startScanSequence();
-    if (id === "screen-4") syncScreen4ResumePanel();
+    if (id === "screen-4") {
+      if (prevActiveScreen !== "screen-4-ready") {
+        resetScreen4UploadVisualOnly();
+      }
+      syncScreen4ResumePanel();
+    }
     if (id === "screen-4-ready")
       void renderProfileReady().catch(function (e) {
         console.error(e);
@@ -5397,8 +5421,14 @@ function startScanSequence() {
       (async function () {
         var ui = document.getElementById("resume-parse-ui");
         var status = document.getElementById("resume-parse-status");
+        var sp0 = document.getElementById("resume-parse-spinner");
         if (ui) ui.style.display = "flex";
         if (status) status.textContent = "Reading your resume…";
+        if (sp0) {
+          sp0.style.display = "block";
+          sp0.style.borderColor = "";
+          sp0.style.borderTopColor = "";
+        }
 
         var st = null;
         try { st = await uploadResumeFileToInsforgeStorage(f0); } catch (e) {}
@@ -6984,40 +7014,42 @@ function startScanSequence() {
   }
 
   function youtubeCardsForLesson(moduleName, lessonIdx) {
+    // Use AI-generated YouTube query if available
+    if (state._aiModules && state._aiModules[moduleName]) {
+      var aiLesson = state._aiModules[moduleName].lessons && state._aiModules[moduleName].lessons[lessonIdx];
+      if (aiLesson && aiLesson.youtubeQuery) {
+        return [{
+          title: aiLesson.youtubeQuery,
+          channel: "YouTube search",
+          dur: "Search results",
+          url: ytSearchUrl(aiLesson.youtubeQuery)
+        }];
+      }
+    }
+    // Fall back to existing logic
     var mod = moduleName;
     var flav = roleYoutubeFlavor();
-    var q1;
-    var q2;
-    var q3;
-    if (lessonIdx === 0) {
-      q1 = mod + " for beginners explained";
-      q2 = flav.a + " " + mod;
-      q3 = mod + " introduction career";
-    } else if (lessonIdx === 2) {
-      q1 = mod + " practical tutorial hands on";
-      q2 = flav.b + " " + mod;
-      q3 = mod + " case study walkthrough";
-    } else if (lessonIdx === 4) {
-      q1 = mod + " advanced deep dive professional";
-      q2 = flav.c + " " + mod;
-      q3 = mod + " expert interview tips";
-    } else if (lessonIdx === 1) {
-      q1 = mod + " core concepts frameworks";
-      q2 = mod + " terminology explained";
-      q3 = flav.b + " basics";
-    } else {
-      q1 = mod + " intermediate best practices";
-      q2 = mod + " common mistakes";
-      q3 = mod + " industry standards";
-    }
+    var q1 = mod + " tutorial for beginners";
+    if (lessonIdx === 2) q1 = mod + " practical tutorial hands on";
+    if (lessonIdx === 4) q1 = mod + " advanced deep dive professional";
     return [
-      { title: "Search: " + mod + " — starter playlist ideas", channel: "YouTube results", dur: "~12–25 min picks", url: ytSearchUrl(q1) },
-      { title: "Search: role + " + mod + " patterns", channel: "YouTube results", dur: "~15–30 min picks", url: ytSearchUrl(q2) },
-      { title: "Search: applied " + mod + " depth", channel: "YouTube results", dur: "~18–40 min picks", url: ytSearchUrl(q3) }
+      { title: q1, channel: "YouTube results", dur: "Search results", url: ytSearchUrl(q1) }
     ];
   }
 
-  function pickResourceLinks(lessonIdx) {
+  function pickResourceLinks(lessonIdx, moduleName) {
+    // Use AI-generated resource if available
+    if (moduleName && state._aiModules && state._aiModules[moduleName]) {
+      var aiLesson = state._aiModules[moduleName].lessons && state._aiModules[moduleName].lessons[lessonIdx];
+      if (aiLesson && aiLesson.resourceUrl) {
+        return [{
+          url: aiLesson.resourceUrl,
+          name: aiLesson.resourceName || "Study Resource",
+          desc: aiLesson.resourceDesc || "Recommended reading for this lesson"
+        }];
+      }
+    }
+    // Fall back to existing role resource pool
     var pool = roleResourcePool();
     var out = [];
     var n = pool.length;
@@ -7036,6 +7068,24 @@ function startScanSequence() {
   ];
 
   function getLessonBody(moduleName, lessonIdx) {
+    // Try AI-generated content first
+    if (state._aiModules && state._aiModules[moduleName]) {
+      var aiMod = state._aiModules[moduleName];
+      var aiLesson = aiMod.lessons && aiMod.lessons[lessonIdx];
+      if (aiLesson) {
+        return {
+          paragraphs: aiLesson.paragraphs || [],
+          takeaways: aiLesson.takeaways || [],
+          practice: aiLesson.practice || "",
+          codeBlock: null,
+          resourceUrl: aiLesson.resourceUrl || null,
+          resourceName: aiLesson.resourceName || null,
+          resourceDesc: aiLesson.resourceDesc || null,
+          youtubeQuery: aiLesson.youtubeQuery || null
+        };
+      }
+    }
+    // Fall back to existing hardcoded content
     var known = MODULE_LESSON_LIBRARY[moduleName];
     if (known && known[lessonIdx]) return known[lessonIdx];
     return buildGenericDomainLesson(moduleName, lessonIdx);
@@ -7320,7 +7370,7 @@ function startScanSequence() {
     var isDone = completed.indexOf(lessonIdx) !== -1;
     var allDone = completed.length >= 5;
     var yt = youtubeCardsForLesson(moduleName, lessonIdx);
-    var links = pickResourceLinks(lessonIdx);
+    var links = pickResourceLinks(lessonIdx, moduleName);
     var banner = "";
     if (allDone) {
       banner = "<div class=\"module-completion-banner\" role=\"status\"><strong>🎉 Module complete!</strong> Your " + escapeHtml(moduleName) + " score has been updated on the dashboard.</div>";
@@ -7340,6 +7390,24 @@ function startScanSequence() {
     }).join("");
     var prevDis = lessonIdx <= 0 ? " disabled style=\"opacity:0.45\"" : "";
     var nextDis = lessonIdx >= 4 ? " disabled style=\"opacity:0.45\"" : "";
+    var quizBlock = "";
+    if (lessonIdx === 4 && state._aiModules && state._aiModules[moduleName] && state._aiModules[moduleName].quizQuestions && state._aiModules[moduleName].quizQuestions.length) {
+      var qsQuiz = state._aiModules[moduleName].quizQuestions;
+      var idSafe = String(moduleName).replace(/[^a-zA-Z0-9_-]/g, "_");
+      quizBlock = "<div style=\"margin-top:1.25rem;padding:1rem;border-radius:8px;background:var(--card-bg);border:1px solid rgba(255,255,255,0.08);\">" +
+        "<h4 style=\"font-size:0.95rem;margin:0 0 0.75rem;color:var(--cyan);\">Module quiz</h4>";
+      for (var qi = 0; qi < qsQuiz.length; qi++) {
+        var qItem = qsQuiz[qi];
+        if (!qItem || !qItem.options || !qItem.options.length) continue;
+        quizBlock += "<div style=\"margin-bottom:1rem;\"><p style=\"margin:0 0 0.5rem;font-weight:600;color:var(--text-muted);\">" + escapeHtml(qItem.question) + "</p>";
+        for (var oi = 0; oi < qItem.options.length; oi++) {
+          quizBlock += "<label style=\"display:block;margin:0.25rem 0;cursor:pointer;color:var(--text-muted);\"><input type=\"radio\" name=\"quiz-" + idSafe + "-" + qi + "\" value=\"" + oi + "\" style=\"margin-right:0.5rem;\" /> " + escapeHtml(qItem.options[oi]) + "</label>";
+        }
+        quizBlock += "</div>";
+      }
+      quizBlock += "<button type=\"button\" class=\"btn btn-primary\" id=\"btn-module-quiz-submit\" style=\"margin-top:0.5rem;\">Submit Quiz</button>" +
+        "<div id=\"module-quiz-result\" style=\"margin-top:0.75rem;font-size:0.9rem;color:var(--text-muted);\"></div></div>";
+    }
     main.innerHTML = banner +
       "<h3 style=\"margin:0 0 0.75rem;font-size:1.05rem;\">Lesson " + (lessonIdx + 1) + " — " + escapeHtml(LESSON_NAV_LABELS[lessonIdx]) + "</h3>" +
       "<div class=\"concept-block\">" + body.paragraphs.map(function (p) { return "<p>" + escapeHtml(p) + "</p>"; }).join("") + "</div>" +
@@ -7354,7 +7422,7 @@ function startScanSequence() {
       "<button type=\"button\" class=\"btn btn-secondary\" id=\"btn-lesson-prev\"" + prevDis + ">← Previous</button>" +
       "<button type=\"button\" class=\"btn btn-primary\" id=\"btn-mark-lesson-complete\">Mark Complete</button>" +
       "<button type=\"button\" class=\"btn btn-secondary\" id=\"btn-lesson-next\"" + nextDis + ">Next Lesson →</button>" +
-      "</div>";
+      "</div>" + quizBlock;
 
     var chk = document.getElementById("module-exercise-check");
     if (chk) {
@@ -7380,6 +7448,32 @@ function startScanSequence() {
         renderModuleScreen(moduleName);
       }
     });
+    var quizSubmitBtn = document.getElementById("btn-module-quiz-submit");
+    if (quizSubmitBtn && lessonIdx === 4 && state._aiModules && state._aiModules[moduleName] && state._aiModules[moduleName].quizQuestions && state._aiModules[moduleName].quizQuestions.length) {
+      var qsRef = state._aiModules[moduleName].quizQuestions;
+      var idSafeQuiz = String(moduleName).replace(/[^a-zA-Z0-9_-]/g, "_");
+      quizSubmitBtn.addEventListener("click", function () {
+        var correct = 0;
+        var total = qsRef.length;
+        for (var qix = 0; qix < qsRef.length; qix++) {
+          var sel = document.querySelector("input[name=\"quiz-" + idSafeQuiz + "-" + qix + "\"]:checked");
+          var picked = sel ? parseInt(sel.value, 10) : null;
+          var exp = qsRef[qix].correctIndex;
+          if (picked === exp) correct++;
+        }
+        var resultEl = document.getElementById("module-quiz-result");
+        var pass = correct >= 2;
+        var msg = pass ? "Great work! Module complete." : "We'll add a recovery module to your dashboard";
+        if (!pass) {
+          try {
+            localStorage.setItem("pathwayai_recovery_" + moduleName, "1");
+          } catch (eR) {}
+        }
+        if (resultEl) {
+          resultEl.innerHTML = "<span style=\"color:var(--cyan);\">You scored " + correct + " out of " + total + ".</span><br/><span style=\"color:var(--text-muted);\">" + escapeHtml(msg) + "</span>";
+        }
+      });
+    }
     main.scrollTop = 0;
   }
 
@@ -7613,6 +7707,18 @@ function startScanSequence() {
         "</div>";
     }).join("");
 
+    // Trigger AI module generation in background
+    (async function() {
+      var currentSkills = skills.map(function(s) { return { name: s.name, pct: s.pct }; });
+      var aiModules = await generateAIModules(state.role || "general", currentSkills);
+      if (aiModules) {
+        state._aiModules = {};
+        aiModules.forEach(function(m) {
+          state._aiModules[m.skillName] = m;
+        });
+      }
+    })();
+
     document.getElementById("weekly-fill").style.width = "66%";
 
     var ins = document.getElementById("dash-ai-insights");
@@ -7637,7 +7743,241 @@ function startScanSequence() {
     }
   }
 
-  
+  function mockResourceUrlForSkill(skillName) {
+    var map = {
+      "DevOps & Reliability": "https://roadmap.sh/devops",
+      "Data Structures": "https://leetcode.com/explore/",
+      "System Design": "https://github.com/donnemartin/system-design-primer",
+      "SQL & Data Modeling": "https://mode.com/sql-tutorial/",
+      "Machine Learning Basics": "https://www.kaggle.com/learn",
+      "Code Quality": "https://refactoring.guru",
+      "Statistics": "https://www.khanacademy.org/math/statistics-probability",
+      "Visualization": "https://www.tableau.com/learn/training",
+      "Collaboration": "https://www.atlassian.com/teamwork"
+    };
+    return map[skillName] || "https://roadmap.sh";
+  }
+
+  function mockQuizForSkill(skillName) {
+    var n = String(skillName || "").toLowerCase();
+    if (n.indexOf("devops") !== -1 || n.indexOf("reliability") !== -1) {
+      return [
+        { question: "Which practice treats servers as cattle, not pets?", options: ["Manual SSH fixes only", "Immutable infrastructure & automation", "Deploying from USB sticks", "Ignoring monitoring alerts"], correctIndex: 1 },
+        { question: "What is the primary role of a CI pipeline?", options: ["Replace code review", "Automate build, test, and integration checks", "Store passwords in plaintext", "Generate marketing copy"], correctIndex: 1 },
+        { question: "Why use infrastructure-as-code (e.g. Terraform)?", options: ["To avoid version control", "To declare reproducible environments", "To remove the need for backups", "To disable rollbacks"], correctIndex: 1 }
+      ];
+    }
+    if (n.indexOf("data structure") !== -1) {
+      return [
+        { question: "Average time complexity of lookup in a balanced BST?", options: ["O(n)", "O(log n)", "O(1) always", "O(n^2)"], correctIndex: 1 },
+        { question: "Which structure is best for LIFO operations?", options: ["Queue", "Stack", "Heap", "Graph"], correctIndex: 1 },
+        { question: "What does a hash map trade off for O(1) average lookups?", options: ["Nothing", "Extra memory and collision handling", "Sorted order guarantee", "Immutable keys only"], correctIndex: 1 }
+      ];
+    }
+    if (n.indexOf("system design") !== -1) {
+      return [
+        { question: "Why shard a database?", options: ["To remove backups", "To scale writes/reads beyond one machine", "To disable caching", "To avoid APIs"], correctIndex: 1 },
+        { question: "What is load balancing mainly for?", options: ["Encrypting static files", "Distributing traffic across instances", "Removing DNS", "Deleting logs"], correctIndex: 1 },
+        { question: "What does eventual consistency imply?", options: ["Writes never succeed", "Replicas may lag briefly but converge", "Strong ACID on every read globally always", "No need for IDs"], correctIndex: 1 }
+      ];
+    }
+    if (n.indexOf("sql") !== -1 || n.indexOf("modeling") !== -1) {
+      return [
+        { question: "What does normalization primarily reduce?", options: ["Query speed always", "Redundant update anomalies", "Need for indexes", "Primary keys"], correctIndex: 1 },
+        { question: "What is a foreign key?", options: ["A backup server", "A reference to another table's row", "A random UUID with no meaning", "An encrypted password column"], correctIndex: 1 },
+        { question: "Why use indexes?", options: ["To duplicate all rows", "To speed up lookups at some write cost", "To remove joins", "To drop tables"], correctIndex: 1 }
+      ];
+    }
+    if (n.indexOf("machine learning") !== -1 || n.indexOf("ml ") !== -1) {
+      return [
+        { question: "What is overfitting?", options: ["Model too simple", "Model memorizes training noise", "Too little data always", "Training too fast"], correctIndex: 1 },
+        { question: "What is a validation set used for?", options: ["Final production scoring only", "Tuning without peeking at test", "Replacing training data", "Deleting labels"], correctIndex: 1 },
+        { question: "Precision measures…", options: ["Total accuracy only", "Positive predictions that were correct", "Recall on negatives only", "Training loss"], correctIndex: 1 }
+      ];
+    }
+    if (n.indexOf("code quality") !== -1) {
+      return [
+        { question: "What does SOLID mainly promote?", options: ["One giant function", "Maintainable object-oriented design", "No tests", "Copy-paste reuse"], correctIndex: 1 },
+        { question: "Why write unit tests?", options: ["To slow teams down", "To catch regressions early", "To avoid CI", "To delete documentation"], correctIndex: 1 },
+        { question: "What is refactoring?", options: ["Rewriting with no tests", "Improving structure without changing behavior", "Adding bugs intentionally", "Deleting dependencies blindly"], correctIndex: 1 }
+      ];
+    }
+    if (n.indexOf("statistic") !== -1) {
+      return [
+        { question: "What does standard deviation describe?", options: ["Central tendency only", "Spread of a distribution", "Always max value", "Correlation causation"], correctIndex: 1 },
+        { question: "A p-value helps assess…", options: ["Business revenue", "Evidence against a null hypothesis", "GPU memory", "SQL joins"], correctIndex: 1 },
+        { question: "Correlation implies causation when…", options: ["Always", "Almost never without controlled study", "Only if r>0.9", "Only for pie charts"], correctIndex: 1 }
+      ];
+    }
+    if (n.indexOf("visualization") !== -1) {
+      return [
+        { question: "When are pie charts often poor?", options: ["Never", "Many similar slices / precise comparison", "Only for 2 slices", "Only in dark mode"], correctIndex: 1 },
+        { question: "What is a core dashboard principle?", options: ["Maximize chartjunk", "Align charts to the decision being made", "Hide units", "Use 3D for everything"], correctIndex: 1 },
+        { question: "Color in charts should mainly…", options: ["Decorate randomly", "Encode meaning consistently", "Match brand only", "Maximize brightness"], correctIndex: 1 }
+      ];
+    }
+    if (n.indexOf("collaboration") !== -1) {
+      return [
+        { question: "What makes async collaboration effective?", options: ["No written decisions", "Clear owners and documented outcomes", "Avoiding standups entirely", "Infinite reply-all"], correctIndex: 1 },
+        { question: "Good feedback is usually…", options: ["Only annual", "Specific, timely, and actionable", "Only positive", "Anonymous always"], correctIndex: 1 },
+        { question: "RACI clarifies…", options: ["Budget only", "Who is responsible vs consulted", "Office seating", "Pay grades only"], correctIndex: 1 }
+      ];
+    }
+    return [
+      { question: "What is the fastest way to improve a skill gap?", options: ["Only watch videos", "Deliberate practice on realistic tasks", "Avoid feedback", "Memorize buzzwords"], correctIndex: 1 },
+      { question: "Why tie learning to your target role?", options: ["It is optional", "Interviewers test applied judgment", "Theory alone guarantees offers", "Certificates replace projects"], correctIndex: 1 },
+      { question: "What signals readiness to hiring managers?", options: ["Buzzwords only", "Artifacts: repos, metrics, or demos", "Large follower count", "Long resumes only"], correctIndex: 1 }
+    ];
+  }
+
+  function buildMockAIModules(role, skills) {
+    var r = role || "your target role";
+    if (!skills || !skills.length) return [];
+    return skills.map(function (sk) {
+      var nm = String(sk.name || "Skill").trim() || "Skill";
+      var resUrl = mockResourceUrlForSkill(nm);
+      var ytQ = nm + " tutorial for beginners freeCodeCamp 2024";
+      var lessons = [
+        {
+          title: "Why This Matters",
+          paragraphs: [
+            "As a professional pursuing " + r + ", " + nm + " is how teams ship reliable outcomes—your resume line must connect to those outcomes.",
+            "Interview loops often test whether you can describe a real incident, metric, or design choice tied to " + nm + ", not generic definitions.",
+            "Picture a scenario: a pipeline breaks before a release window—your ability to reason about " + nm + " is what separates signal from noise."
+          ],
+          takeaways: [
+            "Tie " + nm + " to metrics stakeholders care about (latency, cost, quality, risk).",
+            "Prepare one STAR story where " + nm + " changed an outcome.",
+            "List two tools you would actually use for " + nm + " in " + r + "."
+          ],
+          practice: "Open " + resUrl + " and spend 20 minutes mapping which topics match gaps you have for " + nm + "; write three bullets you will study first.",
+          resourceUrl: resUrl,
+          resourceName: "Primary learning path",
+          resourceDesc: "Curated roadmap and references aligned with building " + nm + ".",
+          youtubeQuery: ytQ
+        },
+        {
+          title: "Core Concepts",
+          paragraphs: [
+            "Core ideas for " + nm + " cluster around definitions you can explain without jargon-for-jargon's sake—what it is, what it optimizes, and what breaks it.",
+            "Compare two approaches teams use for " + nm + " in production and note assumptions (scale, team size, compliance).",
+            "Document four terms you must define crisply in a " + r + " interview about " + nm + "."
+          ],
+          takeaways: [
+            "Know definitions well enough to draw a quick diagram on a whiteboard.",
+            "Pair each concept with a failure mode you have seen or researched.",
+            "Keep a cheat sheet of tradeoffs, not buzzwords."
+          ],
+          practice: "Read the overview at " + resUrl + " and write definitions for four terms in your own words; keep each under 40 words.",
+          resourceUrl: resUrl,
+          resourceName: "Core reference",
+          resourceDesc: "Official or canonical material for concepts behind " + nm + ".",
+          youtubeQuery: ytQ
+        },
+        {
+          title: "See It In Action",
+          paragraphs: [
+            "Walk through a realistic workflow where " + nm + " appears mid-sprint: inputs, checks, handoffs, and how quality is verified.",
+            "Note where automation vs manual judgment applies for " + r + " work involving " + nm + ".",
+            "Identify a monitoring or review step that would catch mistakes early."
+          ],
+          takeaways: [
+            "Follow an end-to-end example once without skipping setup steps.",
+            "Pause at each handoff and name the owner and artifact produced.",
+            "Track one metric that would prove the workflow succeeded."
+          ],
+          practice: "Search YouTube with this query, watch 15 minutes, and summarize three steps you would replicate this week: \"" + ytQ + "\".",
+          resourceUrl: resUrl,
+          resourceName: "Worked examples",
+          resourceDesc: "See real patterns applied before you practice hands-on.",
+          youtubeQuery: ytQ
+        },
+        {
+          title: "Hands-On Practice",
+          paragraphs: [
+            "Do a concrete exercise today that produces an artifact you could link from GitHub, a ticket, or a short write-up.",
+            "Scope small: one passing build, one chart, one query, or one deployed change—evidence beats intention for " + nm + ".",
+            "Timebox 45 minutes; document blockers and how you unblocked them."
+          ],
+          takeaways: [
+            "Ship a tiny artifact end-to-end rather than reading passively.",
+            "Capture commands or queries in a gist for reuse.",
+            "Note what you would automate next time."
+          ],
+          practice: "Complete one hands-on task from the primary resource at " + resUrl + " that maps directly to " + nm + "; paste proof (screenshot or link) in your notes.",
+          resourceUrl: resUrl,
+          resourceName: "Hands-on lab",
+          resourceDesc: "Step-by-step task you can finish in under an hour.",
+          youtubeQuery: ytQ
+        },
+        {
+          title: "Check Your Understanding",
+          paragraphs: [
+            "Review what " + nm + " means for " + r + " when stakes are high: deadlines, incidents, or executive reviews.",
+            "Self-check: explain the skill to a peer in five minutes with no slides—gaps point to what to relearn.",
+            "Preview the quiz below; it targets recall and application, not trivia."
+          ],
+          takeaways: [
+            "If explanations feel fuzzy, revisit Core Concepts before interviewing.",
+            "Tie each answer to a tool or metric you would cite on the job.",
+            "Use misses to schedule a focused retry block within 48 hours."
+          ],
+          practice: "Take the module quiz below; if any item feels guessy, revisit " + resUrl + " and write a one-paragraph explanation of the correct idea.",
+          resourceUrl: resUrl,
+          resourceName: "Review material",
+          resourceDesc: "Sanity-check understanding before interviews.",
+          youtubeQuery: ytQ
+        }
+      ];
+      return {
+        skillName: nm,
+        lessons: lessons,
+        quizQuestions: mockQuizForSkill(nm)
+      };
+    });
+  }
+
+  async function generateAIModules(role, skills) {
+    // Check cache first — don't regenerate if same role+skills
+    var cacheKey = "pathwayai_ai_modules_" + role;
+    try {
+      var cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        var parsed = JSON.parse(cached);
+        // Cache valid if same skills count and generated within 24 hours
+        if (parsed.skills && parsed.skills.length === skills.length &&
+            parsed.generatedAt && (Date.now() - parsed.generatedAt) < 86400000) {
+          return parsed.modules;
+        }
+      }
+    } catch (e) {}
+
+    try {
+      var response = await fetch("/api/generate-modules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: role, skills: skills })
+      });
+      var data = await response.json();
+      if (!response.ok || data.error) return buildMockAIModules(role, skills);
+      var text = data.result ? String(data.result).trim() : "";
+      if (text.startsWith("```")) {
+        text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/m, "").trim();
+      }
+      var parsedOut = JSON.parse(text);
+      if (!parsedOut.modules || !parsedOut.modules.length) return buildMockAIModules(role, skills);
+      // Save to cache
+      localStorage.setItem(cacheKey, JSON.stringify({
+        modules: parsedOut.modules,
+        skills: skills,
+        generatedAt: Date.now()
+      }));
+      return parsedOut.modules;
+    } catch (e) {
+      console.error("AI module generation failed:", e);
+      return buildMockAIModules(role, skills);
+    }
+  }
 
   function applyResumeBoosts(domains) {
     var parsed = getActiveResumeParsed();
