@@ -2132,6 +2132,42 @@
       line-height: 1.35;
       color: #888888;
     }
+    .module-yt-skeleton {
+      display: flex;
+      align-items: center;
+      background: #ffffff;
+      border: 0.5px solid #ede9e0;
+      border-radius: 12px;
+      overflow: hidden;
+      max-width: 480px;
+    }
+    .module-yt-skel-thumb {
+      width: 140px;
+      min-width: 140px;
+      height: 84px;
+      background: #f0ece6;
+      flex-shrink: 0;
+      animation: ytSkelShimmer 1.4s ease-in-out infinite;
+    }
+    .module-yt-skel-meta {
+      padding: 0 16px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .module-yt-skel-line {
+      background: #f0ece6;
+      border-radius: 4px;
+      animation: ytSkelShimmer 1.4s ease-in-out infinite;
+    }
+    .module-yt-skel-title { height: 13px; width: 85%; }
+    .module-yt-skel-channel { height: 11px; width: 50%; }
+    @keyframes ytSkelShimmer {
+      0%   { opacity: 1; }
+      50%  { opacity: 0.45; }
+      100% { opacity: 1; }
+    }
     .module-practice-card {
       margin: 1rem 0;
       padding: 12px;
@@ -8019,6 +8055,15 @@ function startScanSequence() {
   }
 
   function youtubeCardsForLesson(moduleName, lessonIdx) {
+    var aiLessonDbg = state._aiModules && state._aiModules[moduleName]
+      ? (state._aiModules[moduleName].lessons && state._aiModules[moduleName].lessons[lessonIdx])
+      : undefined;
+    console.log('[PathwayAI Debug] youtubeCardsForLesson', {
+      skillName: moduleName,
+      lessonIdx,
+      hasAiLesson: !!aiLessonDbg,
+      youtubeVideos: aiLessonDbg?.youtubeVideos
+    });
     if (state._aiModules && state._aiModules[moduleName]) {
       var aiLesson = state._aiModules[moduleName].lessons && state._aiModules[moduleName].lessons[lessonIdx];
       if (aiLesson && Array.isArray(aiLesson.youtubeVideos) && aiLesson.youtubeVideos.length) {
@@ -8043,6 +8088,20 @@ function startScanSequence() {
       }
     }
     // Fall back to existing logic
+    var aiModsEmpty = !state._aiModules || Object.keys(state._aiModules).length === 0;
+    if (aiModsEmpty) {
+      return [{
+        _youtubeSkeleton: true,
+        html:
+          '<div class="module-yt-skeleton">' +
+            '<div class="module-yt-skel-thumb"></div>' +
+            '<div class="module-yt-skel-meta">' +
+              '<div class="module-yt-skel-line module-yt-skel-title"></div>' +
+              '<div class="module-yt-skel-line module-yt-skel-channel"></div>' +
+            '</div>' +
+          '</div>'
+      }];
+    }
     var mod = moduleName;
     var flav = roleYoutubeFlavor();
     var q1 = mod + " tutorial for beginners";
@@ -8593,14 +8652,9 @@ function startScanSequence() {
     var isDone = completed.indexOf(lessonIdx) !== -1;
     var allDone = completed.length >= 5;
     var yt = youtubeCardsForLesson(moduleName, lessonIdx);
-    var links = pickResourceLinks(lessonIdx, moduleName);
-    var banner = "";
-    if (allDone) {
-      banner = "<div class=\"module-completion-banner\" role=\"status\"><strong>🎉 Module complete!</strong> Your " + escapeHtml(moduleName) + " score has been updated on the dashboard.</div>";
-    }
-    var codeHtml = body.codeBlock ? "<pre class=\"module-code-block\"><code>" + escapeHtml(String(body.codeBlock).trim()) + "</code></pre>" : "";
-    var takeList = body.takeaways.map(function (t) { return "<li>" + escapeHtml(t) + "</li>"; }).join("");
-    var ytHtml = yt.map(function (v) {
+    var ytHtml = yt.length === 1 && yt[0] && yt[0]._youtubeSkeleton && yt[0].html
+      ? yt[0].html
+      : yt.map(function (v) {
       var vid = v.videoId;
       if (vid) {
         var watchHref = "https://www.youtube.com/watch?v=" + encodeURIComponent(vid);
@@ -8621,6 +8675,13 @@ function startScanSequence() {
         "<div class=\"yt-title\">" + escapeHtml(v.title) + "</div>" +
         "<div class=\"yt-meta\">" + escapeHtml(v.channel) + " · " + escapeHtml(v.dur) + "</div></a>";
     }).join("");
+    var links = pickResourceLinks(lessonIdx, moduleName);
+    var banner = "";
+    if (allDone) {
+      banner = "<div class=\"module-completion-banner\" role=\"status\"><strong>🎉 Module complete!</strong> Your " + escapeHtml(moduleName) + " score has been updated on the dashboard.</div>";
+    }
+    var codeHtml = body.codeBlock ? "<pre class=\"module-code-block\"><code>" + escapeHtml(String(body.codeBlock).trim()) + "</code></pre>" : "";
+    var takeList = body.takeaways.map(function (t) { return "<li>" + escapeHtml(t) + "</li>"; }).join("");
     var linksHtml = links.map(function (L) {
       return "<a class=\"module-link-card\" href=\"" + escapeHtml(L.url) + "\" target=\"_blank\" rel=\"noopener noreferrer\">" +
         "<div class=\"link-name\">" + escapeHtml(L.name) + "</div>" +
@@ -9242,8 +9303,16 @@ function startScanSequence() {
         });
       }
       var aiModules = await generateAIModules(state.role || "general", modulesInput);
+      console.log('[PathwayAI Debug] aiModules returned:', aiModules);
       if (aiModules) {
         state._aiModules = aiModules;
+      }
+      console.log('[PathwayAI Debug] state._aiModules after assign:', Object.keys(state._aiModules || {}));
+      var screenModuleEl = document.getElementById("screen-module");
+      if (state._aiModules && screenModuleEl && screenModuleEl.classList.contains("active") && state._learningModule) {
+        var lessonIdx = typeof state._lessonIndex === "number" ? state._lessonIndex : 0;
+        lessonIdx = Math.max(0, Math.min(4, lessonIdx));
+        renderModuleMain(state._learningModule, lessonIdx);
       }
     })();
 
@@ -9537,6 +9606,7 @@ function startScanSequence() {
   }
 
   async function generateAIModules(role, skills) {
+    console.log('[PathwayAI Debug] generateAIModules called', { role, skillCount: skills.length, skills });
     function modulesArrayToKeyedObject(modules) {
       var aiModules = {};
       (modules || []).forEach(function (mod) {
@@ -9548,41 +9618,62 @@ function startScanSequence() {
     // Check cache first — don't regenerate if same role+skills
     var CACHE_VERSION = "v2";
     var cacheKey = "pathwayai_ai_modules_" + CACHE_VERSION + "_" + role;
+    console.log('[PathwayAI Debug] cache key:', cacheKey);
     try {
       var cached = localStorage.getItem(cacheKey);
       if (cached) {
         var parsed = JSON.parse(cached);
         var incomingNames = skills.slice(0, 5).map(function(s) { return s.name; }).sort().join(",");
         var cachedNames = (parsed.skillNames || []).sort().join(",");
+        console.log('[PathwayAI Debug] cache hit?', !!parsed);
+        console.log('[PathwayAI Debug] cache valid?', incomingNames === cachedNames && parsed.generatedAt && (Date.now() - parsed.generatedAt) < 86400000);
         if (incomingNames === cachedNames && parsed.generatedAt && (Date.now() - parsed.generatedAt) < 86400000) {
-          return modulesArrayToKeyedObject(parsed.modules);
+          var result = modulesArrayToKeyedObject(parsed.modules);
+          console.log('[PathwayAI Debug] returning from cache, keys:', Object.keys(result));
+          return result;
         }
+      } else {
+        console.log('[PathwayAI Debug] cache hit?', false);
+        console.log('[PathwayAI Debug] cache valid?', false);
       }
     } catch (e) {}
 
     try {
+      console.log('[PathwayAI Debug] calling /api/generate-modules');
       var response = await fetch("/api/generate-modules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ role: role, skills: skillsToSend })
       });
+      console.log('[PathwayAI Debug] /api/generate-modules status:', response.status);
       var data = await response.json();
-      if (!response.ok || data.error) return modulesArrayToKeyedObject(buildMockAIModules(role, skills));
+      if (!response.ok || data.error) {
+        console.log('[PathwayAI Debug] ⚠️ falling back to MOCK modules');
+        return modulesArrayToKeyedObject(buildMockAIModules(role, skills));
+      }
       var text = data.result ? String(data.result).trim() : "";
       if (text.startsWith("```")) {
         text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/m, "").trim();
       }
       var parsedOut = JSON.parse(text);
-      if (!parsedOut.modules || !parsedOut.modules.length) return modulesArrayToKeyedObject(buildMockAIModules(role, skills));
+      console.log('[PathwayAI Debug] parsedOut keys:', Object.keys(parsedOut || {}));
+      console.log('[PathwayAI Debug] parsedOut.modules length:', parsedOut?.modules?.length);
+      if (!parsedOut.modules || !parsedOut.modules.length) {
+        console.log('[PathwayAI Debug] ⚠️ falling back to MOCK modules');
+        return modulesArrayToKeyedObject(buildMockAIModules(role, skills));
+      }
       // Save to cache
       localStorage.setItem(cacheKey, JSON.stringify({
         modules: parsedOut.modules,
         skillNames: skills.slice(0, 5).map(function(s) { return s.name; }),
         generatedAt: Date.now()
       }));
-      return modulesArrayToKeyedObject(parsedOut.modules);
+      var result = modulesArrayToKeyedObject(parsedOut.modules);
+      console.log('[PathwayAI Debug] returning from API, keys:', Object.keys(result));
+      return result;
     } catch (e) {
       console.error("AI module generation failed:", e);
+      console.log('[PathwayAI Debug] ⚠️ falling back to MOCK modules');
       return modulesArrayToKeyedObject(buildMockAIModules(role, skills));
     }
   }

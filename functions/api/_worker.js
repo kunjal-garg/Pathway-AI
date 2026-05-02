@@ -302,36 +302,8 @@ async function resolveYoutubeVideo(query, skillName, lessonIdx, env) {
 
     if (!ytData.items || !ytData.items.length) return null;
 
-    // 4. Ask GPT to pick the best video for this role and skill
-    var candidates = ytData.items.map(function(item, i) {
-      return i + ": " + item.snippet.title + " by " + item.snippet.channelTitle;
-    }).join("\n");
-
-    var pickRes = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer " + env.OPENAI_API_KEY
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        max_tokens: 10,
-        messages: [
-          {
-            role: "user",
-            content: "Query was: \"" + query + "\"\nCandidates:\n" + candidates + "\nReply with only the index number (0-4) of the most educationally useful video for someone learning this skill."
-          }
-        ]
-      })
-    });
-    var pickData = await pickRes.json();
-    var pickedIdx = 0;
-    try {
-      pickedIdx = parseInt(pickData.choices[0].message.content.trim(), 10);
-      if (isNaN(pickedIdx) || pickedIdx < 0 || pickedIdx >= ytData.items.length) pickedIdx = 0;
-    } catch(e) { pickedIdx = 0; }
-
-    var chosen = ytData.items[pickedIdx];
+    // 4. Use top search result (YouTube relevance ranking is sufficient; avoids GPT round trip per lesson)
+    var chosen = ytData.items[0];
     var video = [{
       title: chosen.snippet.title,
       url: "https://www.youtube.com/watch?v=" + chosen.id.videoId,
