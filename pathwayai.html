@@ -7402,62 +7402,62 @@ function startScanSequence() {
 
   var QUIZ_EXTRA_BANK = {
     "DevOps & Reliability": [
-      { question: "Which tool is used for container orchestration at scale?", options: ["Jenkins", "Kubernetes", "Ansible", "Nagios"], correctIndex: 1 },
-      { question: "What does a liveness probe do in Kubernetes?", options: ["Monitors CPU usage", "Checks if a container should be restarted", "Scales pods automatically", "Manages secrets"], correctIndex: 1 },
-      { question: "What is the purpose of a Dockerfile?", options: ["To run containers", "To define the steps to build a Docker image", "To monitor containers", "To deploy to Kubernetes"], correctIndex: 1 },
-      { question: "Which command shows running Docker containers?", options: ["docker images", "docker ps", "docker run", "docker build"], correctIndex: 1 },
-      { question: "What does 'immutable infrastructure' mean?", options: ["Servers that cannot be monitored", "Infrastructure that is replaced rather than updated in place", "Infrastructure with no backups", "Servers that run 24/7"], correctIndex: 1 },
-      { question: "What is a rolling deployment?", options: ["Deploying to all servers at once", "Gradually replacing old instances with new ones to avoid downtime", "A backup strategy", "A testing approach"], correctIndex: 1 },
-      { question: "What does SRE stand for?", options: ["Software Release Engineering", "Site Reliability Engineering", "Server Runtime Environment", "Software Reliability Evaluation"], correctIndex: 1 }
+      { question: "Which tool is used for container orchestration at scale?", options: ["Jenkins", "Kubernetes", "Ansible", "Nagios"], correctIndex: 1, topic: "Container Orchestration", explanation: "Kubernetes is the industry standard tool for managing containers at scale across clusters" },
+      { question: "What does a liveness probe do in Kubernetes?", options: ["Monitors CPU usage", "Checks if a container should be restarted", "Scales pods automatically", "Manages secrets"], correctIndex: 1, topic: "Kubernetes Probes", explanation: "A liveness probe tells Kubernetes when to restart a container that is stuck or unhealthy" },
+      { question: "What is the purpose of a Dockerfile?", options: ["To run containers", "To define the steps to build a Docker image", "To monitor containers", "To deploy to Kubernetes"], correctIndex: 1, topic: "Docker Images", explanation: "A Dockerfile defines the exact steps to assemble a Docker image layer by layer" },
+      { question: "Which command shows running Docker containers?", options: ["docker images", "docker ps", "docker run", "docker build"], correctIndex: 1, topic: "Docker CLI", explanation: "docker ps lists all currently running containers on the host" },
+      { question: "What does 'immutable infrastructure' mean?", options: ["Servers that cannot be monitored", "Infrastructure that is replaced rather than updated in place", "Infrastructure with no backups", "Servers that run 24/7"], correctIndex: 1, topic: "Immutable Infrastructure", explanation: "Immutable infrastructure means replacing servers entirely rather than patching them in place" },
+      { question: "What is a rolling deployment?", options: ["Deploying to all servers at once", "Gradually replacing old instances with new ones to avoid downtime", "A backup strategy", "A testing approach"], correctIndex: 1, topic: "Deployment Strategies", explanation: "Rolling updates replace pods gradually so users never see downtime during a release" },
+      { question: "What does SRE stand for?", options: ["Software Release Engineering", "Site Reliability Engineering", "Server Runtime Environment", "Software Reliability Evaluation"], correctIndex: 1, topic: "SRE Fundamentals", explanation: "SRE (Site Reliability Engineering) applies software engineering to operations and reliability problems" }
     ],
     "Data Structures": [
-      { question: "What is the time complexity of binary search?", options: ["O(n)", "O(n²)", "O(log n)", "O(1)"], correctIndex: 2 },
-      { question: "Which data structure uses LIFO order?", options: ["Queue", "Stack", "Heap", "Graph"], correctIndex: 1 },
-      { question: "What is a hash collision?", options: ["When two keys hash to the same index", "When a hash table is full", "When a key is not found", "When two arrays are merged"], correctIndex: 0 },
-      { question: "What is the worst-case time complexity of quicksort?", options: ["O(n log n)", "O(n)", "O(n²)", "O(log n)"], correctIndex: 2 },
-      { question: "Which tree is self-balancing?", options: ["Binary Tree", "BST", "AVL Tree", "Trie"], correctIndex: 2 },
-      { question: "What does DFS stand for in graph traversal?", options: ["Data Flow Search", "Depth First Search", "Dynamic Function Scan", "Direct File System"], correctIndex: 1 },
-      { question: "What is a min-heap property?", options: ["Root is the largest element", "Root is the smallest element", "All leaves are at same level", "Tree is always balanced"], correctIndex: 1 }
+      { question: "What is the time complexity of binary search?", options: ["O(n)", "O(n²)", "O(log n)", "O(1)"], correctIndex: 2, topic: "Binary Search", explanation: "Binary search eliminates half the search space each step giving O(log n) time complexity" },
+      { question: "Which data structure uses LIFO order?", options: ["Queue", "Stack", "Heap", "Graph"], correctIndex: 1, topic: "Stack vs Queue", explanation: "A stack uses Last-In-First-Out (LIFO) order — the last item pushed is the first popped" },
+      { question: "What is a hash collision?", options: ["When two keys hash to the same index", "When a hash table is full", "When a key is not found", "When two arrays are merged"], correctIndex: 0, topic: "Hash Tables", explanation: "A collision occurs when two different keys produce the same hash index" },
+      { question: "What is the worst-case time complexity of quicksort?", options: ["O(n log n)", "O(n)", "O(n²)", "O(log n)"], correctIndex: 2, topic: "Sorting Algorithms", explanation: "Quicksort degrades to O(n²) in the worst case when pivot selection is poor" },
+      { question: "Which tree is self-balancing?", options: ["Binary Tree", "BST", "AVL Tree", "Trie"], correctIndex: 2, topic: "Balanced Trees", explanation: "AVL trees self-balance after every insert/delete to maintain O(log n) operations" },
+      { question: "What does DFS stand for in graph traversal?", options: ["Data Flow Search", "Depth First Search", "Dynamic Function Scan", "Direct File System"], correctIndex: 1, topic: "Graph Traversal", explanation: "DFS (Depth First Search) explores as far as possible down each branch before backtracking" },
+      { question: "What is a min-heap property?", options: ["Root is the largest element", "Root is the smallest element", "All leaves are at same level", "Tree is always balanced"], correctIndex: 1, topic: "Heap Properties", explanation: "In a min-heap the root is always the smallest element in the tree" }
     ],
     "System Design": [
-      { question: "What is a CDN used for?", options: ["Database replication", "Serving static assets from servers closer to users to reduce latency", "Encrypting user data", "Managing microservices"], correctIndex: 1 },
-      { question: "What does horizontal scaling mean?", options: ["Adding more RAM to one server", "Adding more servers to handle load", "Upgrading CPU", "Compressing data"], correctIndex: 1 },
-      { question: "What is eventual consistency?", options: ["All nodes are always in sync", "Replicas will converge to the same state given enough time", "A type of SQL transaction", "A caching strategy"], correctIndex: 1 },
-      { question: "What is the purpose of a message queue like Kafka?", options: ["To store user sessions", "To decouple services and handle async communication with durability", "To cache database results", "To serve static files"], correctIndex: 1 },
-      { question: "What is a circuit breaker pattern?", options: ["A hardware component", "Stops cascading failures by cutting off calls to a failing service", "A load balancing algorithm", "A database pattern"], correctIndex: 1 },
-      { question: "What does sharding a database mean?", options: ["Backing up data", "Splitting data across multiple database instances by a shard key", "Encrypting a database", "Replicating a database"], correctIndex: 1 },
-      { question: "What is rate limiting used for?", options: ["Speeding up API responses", "Preventing abuse by limiting how many requests a client can make in a time window", "Caching API responses", "Authenticating users"], correctIndex: 1 }
+      { question: "What is a CDN used for?", options: ["Database replication", "Serving static assets from servers closer to users to reduce latency", "Encrypting user data", "Managing microservices"], correctIndex: 1, topic: "CDN", explanation: "CDNs serve static assets from edge servers geographically close to users reducing latency" },
+      { question: "What does horizontal scaling mean?", options: ["Adding more RAM to one server", "Adding more servers to handle load", "Upgrading CPU", "Compressing data"], correctIndex: 1, topic: "Scaling Strategies", explanation: "Horizontal scaling adds more machines to distribute load across a fleet" },
+      { question: "What is eventual consistency?", options: ["All nodes are always in sync", "Replicas will converge to the same state given enough time", "A type of SQL transaction", "A caching strategy"], correctIndex: 1, topic: "Consistency Models", explanation: "Eventual consistency means replicas converge to the same state over time without guarantees on when" },
+      { question: "What is the purpose of a message queue like Kafka?", options: ["To store user sessions", "To decouple services and handle async communication with durability", "To cache database results", "To serve static files"], correctIndex: 1, topic: "Message Queues", explanation: "Message queues like Kafka decouple producers from consumers enabling async reliable communication" },
+      { question: "What is a circuit breaker pattern?", options: ["A hardware component", "Stops cascading failures by cutting off calls to a failing service", "A load balancing algorithm", "A database pattern"], correctIndex: 1, topic: "Resilience Patterns", explanation: "A circuit breaker prevents cascading failures by stopping calls to a failing downstream service" },
+      { question: "What does sharding a database mean?", options: ["Backing up data", "Splitting data across multiple database instances by a shard key", "Encrypting a database", "Replicating a database"], correctIndex: 1, topic: "Database Sharding", explanation: "Sharding splits data across multiple database instances by a shard key to handle scale" },
+      { question: "What is rate limiting used for?", options: ["Speeding up API responses", "Preventing abuse by limiting how many requests a client can make in a time window", "Caching API responses", "Authenticating users"], correctIndex: 1, topic: "Rate Limiting", explanation: "Rate limiting protects APIs from abuse by capping how many requests a client can make per window" }
     ],
     "SQL & Data Modeling": [
-      { question: "What does INNER JOIN return?", options: ["All rows from left table", "All rows from right table", "Only rows with matching values in both tables", "All rows from both tables"], correctIndex: 2 },
-      { question: "What is a primary key?", options: ["Any column in a table", "A column that uniquely identifies each row and cannot be NULL", "A foreign key reference", "An indexed column"], correctIndex: 1 },
-      { question: "What does GROUP BY do?", options: ["Sorts results", "Aggregates rows that have the same value in specified columns", "Filters rows", "Joins tables"], correctIndex: 1 },
-      { question: "What is a NULL value in SQL?", options: ["Zero", "An empty string", "The absence of a value — unknown or missing data", "False"], correctIndex: 2 },
-      { question: "What does DISTINCT do in a SELECT?", options: ["Sorts results", "Returns only unique values, removing duplicates", "Filters rows", "Counts rows"], correctIndex: 1 },
-      { question: "What is an index in a database?", options: ["A list of all tables", "A data structure that speeds up data retrieval at the cost of additional write overhead", "A backup copy", "A foreign key"], correctIndex: 1 },
-      { question: "What is normalization in databases?", options: ["Making numbers positive", "Organizing data to reduce redundancy and improve data integrity", "Sorting data", "Encrypting data"], correctIndex: 1 }
+      { question: "What does INNER JOIN return?", options: ["All rows from left table", "All rows from right table", "Only rows with matching values in both tables", "All rows from both tables"], correctIndex: 2, topic: "SQL Joins", explanation: "INNER JOIN returns only rows where the join condition matches in both tables" },
+      { question: "What is a primary key?", options: ["Any column in a table", "A column that uniquely identifies each row and cannot be NULL", "A foreign key reference", "An indexed column"], correctIndex: 1, topic: "Primary Keys", explanation: "A primary key uniquely identifies each row and cannot be NULL or duplicated" },
+      { question: "What does GROUP BY do?", options: ["Sorts results", "Aggregates rows that have the same value in specified columns", "Filters rows", "Joins tables"], correctIndex: 1, topic: "Aggregation", explanation: "GROUP BY groups rows sharing the same column value so aggregate functions run per group" },
+      { question: "What is a NULL value in SQL?", options: ["Zero", "An empty string", "The absence of a value — unknown or missing data", "False"], correctIndex: 2, topic: "NULL Handling", explanation: "NULL means the value is unknown or missing — it is not zero or empty string" },
+      { question: "What does DISTINCT do in a SELECT?", options: ["Sorts results", "Returns only unique values, removing duplicates", "Filters rows", "Counts rows"], correctIndex: 1, topic: "DISTINCT", explanation: "DISTINCT filters out duplicate rows from the result set keeping only unique values" },
+      { question: "What is an index in a database?", options: ["A list of all tables", "A data structure that speeds up data retrieval at the cost of additional write overhead", "A backup copy", "A foreign key"], correctIndex: 1, topic: "Indexes", explanation: "An index speeds up reads by creating a lookup structure but adds overhead to writes" },
+      { question: "What is normalization in databases?", options: ["Making numbers positive", "Organizing data to reduce redundancy and improve data integrity", "Sorting data", "Encrypting data"], correctIndex: 1, topic: "Normalization", explanation: "Normalization organizes tables to eliminate redundancy and maintain data integrity" }
     ],
     "Machine Learning Basics": [
-      { question: "What is overfitting?", options: ["Model performs poorly on training data", "Model performs well on training but poorly on new data", "Model is too simple", "Model has too few parameters"], correctIndex: 1 },
-      { question: "What is the purpose of a validation set?", options: ["To train the model", "To tune hyperparameters without touching the test set", "To clean data", "To visualize results"], correctIndex: 1 },
-      { question: "What is one-hot encoding used for?", options: ["Normalizing numeric features", "Converting categorical variables into binary columns for ML models", "Removing outliers", "Splitting data"], correctIndex: 1 },
-      { question: "What is a confusion matrix?", options: ["A tool to visualize feature importance", "A table showing TP, FP, TN, FN to evaluate classifier performance", "A loss function", "A regularization technique"], correctIndex: 1 },
-      { question: "What does dropout do in neural networks?", options: ["Speeds up training", "Randomly disables neurons during training to prevent overfitting", "Adds more layers", "Initializes weights"], correctIndex: 1 },
-      { question: "What is transfer learning?", options: ["Moving data between servers", "Using a pre-trained model as a starting point for a new task", "Training a model from scratch", "A type of ensemble method"], correctIndex: 1 },
-      { question: "What is the difference between supervised and unsupervised learning?", options: ["No difference", "Supervised uses labeled data to learn a mapping; unsupervised finds patterns in unlabeled data", "Unsupervised is always better", "Supervised learning cannot use neural networks"], correctIndex: 1 }
+      { question: "What is overfitting?", options: ["Model performs poorly on training data", "Model performs well on training but poorly on new data", "Model is too simple", "Model has too few parameters"], correctIndex: 1, topic: "Overfitting", explanation: "Overfitting means the model memorizes training data and fails to generalize to new data" },
+      { question: "What is the purpose of a validation set?", options: ["To train the model", "To tune hyperparameters without touching the test set", "To clean data", "To visualize results"], correctIndex: 1, topic: "Validation Set", explanation: "A validation set lets you tune hyperparameters without contaminating the held-out test set" },
+      { question: "What is one-hot encoding used for?", options: ["Normalizing numeric features", "Converting categorical variables into binary columns for ML models", "Removing outliers", "Splitting data"], correctIndex: 1, topic: "Feature Encoding", explanation: "One-hot encoding converts categorical variables into binary columns that ML models can process" },
+      { question: "What is a confusion matrix?", options: ["A tool to visualize feature importance", "A table showing TP, FP, TN, FN to evaluate classifier performance", "A loss function", "A regularization technique"], correctIndex: 1, topic: "Model Evaluation", explanation: "A confusion matrix shows TP/FP/TN/FN giving a complete picture of classifier performance" },
+      { question: "What does dropout do in neural networks?", options: ["Speeds up training", "Randomly disables neurons during training to prevent overfitting", "Adds more layers", "Initializes weights"], correctIndex: 1, topic: "Regularization", explanation: "Dropout randomly disables neurons during training forcing the network to learn robust features" },
+      { question: "What is transfer learning?", options: ["Moving data between servers", "Using a pre-trained model as a starting point for a new task", "Training a model from scratch", "A type of ensemble method"], correctIndex: 1, topic: "Transfer Learning", explanation: "Transfer learning reuses weights from a pre-trained model as a starting point saving training time" },
+      { question: "What is the difference between supervised and unsupervised learning?", options: ["No difference", "Supervised uses labeled data to learn a mapping; unsupervised finds patterns in unlabeled data", "Unsupervised is always better", "Supervised learning cannot use neural networks"], correctIndex: 1, topic: "Learning Paradigms", explanation: "Supervised learning maps labeled inputs to outputs; unsupervised finds structure in unlabeled data" }
     ]
   };
 
   function buildGenericExtraQuestions(skillName) {
     var s = skillName;
     return [
-      { question: "Which best describes a foundational concept in " + s + "?", options: ["Ignoring tradeoffs", "Building reliable understanding before advanced topics", "Skipping practice", "Avoiding feedback"], correctIndex: 1 },
-      { question: "Why is structured practice important for " + s + "?", options: ["It replaces theory entirely", "It turns concepts into durable skills through repetition", "It only matters for beginners", "It is optional"], correctIndex: 1 },
-      { question: "When learning " + s + ", what is a good first step?", options: ["Memorize jargon only", "Clarify goals and map prerequisites", "Skip fundamentals", "Avoid examples"], correctIndex: 1 },
-      { question: "How should you handle gaps while studying " + s + "?", options: ["Ignore them", "Note them and revisit with targeted exercises", "Assume they will disappear", "Only read blogs"], correctIndex: 1 },
-      { question: "What makes feedback valuable for " + s + "?", options: ["It must be only positive", "It highlights mistakes and guides correction", "It should be avoided", "It replaces self-study"], correctIndex: 1 },
-      { question: "In " + s + ", why define success criteria early?", options: ["To make learning slower", "To know what good looks like and measure progress", "To avoid planning", "To impress others only"], correctIndex: 1 },
-      { question: "Which habit supports long-term growth in " + s + "?", options: ["Only cramming before deadlines", "Regular review and applying concepts to real tasks", "Avoiding documentation", "Working in isolation only"], correctIndex: 1 }
+      { question: "Which best describes a foundational concept in " + s + "?", options: ["Ignoring tradeoffs", "Building reliable understanding before advanced topics", "Skipping practice", "Avoiding feedback"], correctIndex: 1, topic: "Core Concept", explanation: "Solid fundamentals reduce confusion when you tackle harder ideas later." },
+      { question: "Why is structured practice important for " + s + "?", options: ["It replaces theory entirely", "It turns concepts into durable skills through repetition", "It only matters for beginners", "It is optional"], correctIndex: 1, topic: "Best Practice", explanation: "Repeated, deliberate practice turns abstract knowledge into usable skill." },
+      { question: "When learning " + s + ", what is a good first step?", options: ["Memorize jargon only", "Clarify goals and map prerequisites", "Skip fundamentals", "Avoid examples"], correctIndex: 1, topic: "Fundamentals", explanation: "Knowing what you are solving for and what you need first saves wasted effort." },
+      { question: "How should you handle gaps while studying " + s + "?", options: ["Ignore them", "Note them and revisit with targeted exercises", "Assume they will disappear", "Only read blogs"], correctIndex: 1, topic: "Core Concept", explanation: "Closing specific gaps beats rereading everything without a plan." },
+      { question: "What makes feedback valuable for " + s + "?", options: ["It must be only positive", "It highlights mistakes and guides correction", "It should be avoided", "It replaces self-study"], correctIndex: 1, topic: "Best Practice", explanation: "Actionable feedback tells you what to fix instead of guessing." },
+      { question: "In " + s + ", why define success criteria early?", options: ["To make learning slower", "To know what good looks like and measure progress", "To avoid planning", "To impress others only"], correctIndex: 1, topic: "Fundamentals", explanation: "Clear criteria let you tell real progress from busywork." },
+      { question: "Which habit supports long-term growth in " + s + "?", options: ["Only cramming before deadlines", "Regular review and applying concepts to real tasks", "Avoiding documentation", "Working in isolation only"], correctIndex: 1, topic: "Core Concept", explanation: "Spaced review and real application beat cramming for retention." }
     ];
   }
 
@@ -7502,13 +7502,114 @@ function startScanSequence() {
     return {
       question: question.question,
       options: pairs.map(function (p) { return p.text; }),
-      correctIndex: correctIndex
+      correctIndex: correctIndex,
+      topic: question.topic,
+      explanation: question.explanation
     };
+  }
+
+  function buildRecoveryModuleContent(skillName) {
+    var fallbackUrl = mockResourceUrlForSkill(skillName);
+    var wrongTopics = [];
+    var score = 0;
+    var total = 10;
+    try {
+      var raw = localStorage.getItem("pathwayai_recovery_" + skillName);
+      if (raw) {
+        var parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+          if (Array.isArray(parsed.wrongTopics)) wrongTopics = parsed.wrongTopics;
+          if (typeof parsed.score === "number") score = parsed.score;
+          if (typeof parsed.total === "number") total = parsed.total;
+        }
+      }
+    } catch (e) {}
+    var n = wrongTopics.length;
+    var intro =
+      "You answered " + n + " questions incorrectly on " + skillName + ". " +
+      "This recovery lesson focuses only on the topics you missed.";
+    var sections = wrongTopics.map(function (wt) {
+      return {
+        topic: wt.topic || "Review",
+        question: wt.question || "",
+        correctAnswer: wt.correctAnswer || "",
+        explanation: wt.explanation || "",
+        resourceUrl: fallbackUrl
+      };
+    });
+    var summary =
+      n > 0
+        ? "Review these " + n + " topics, then retake the module quiz"
+        : "When ready, retake the module quiz to confirm your understanding.";
+    return {
+      skillName: skillName,
+      intro: intro,
+      sections: sections,
+      summary: summary,
+      score: score,
+      total: total,
+      fallbackUrl: fallbackUrl
+    };
+  }
+
+  function renderRecoveryLesson(skillName) {
+    var main = document.getElementById("module-lesson-main");
+    if (!main) return;
+    var nav = document.getElementById("module-lesson-nav");
+    var strip = document.getElementById("module-lesson-nav-strip");
+    if (nav) nav.innerHTML = "";
+    if (strip) strip.innerHTML = "";
+    var data = buildRecoveryModuleContent(skillName);
+    var studyUrl = escapeHtml(data.fallbackUrl);
+    var parts = [];
+    parts.push(
+      "<div style=\"padding:0 0 1rem;\">" +
+      "<h3 style=\"margin:0 0 0.75rem;font-size:1.15rem;color:var(--text-muted);\">Recovery Lesson — " +
+      escapeHtml(skillName) + "</h3>" +
+      "<p style=\"margin:0 0 0.5rem;color:var(--text-muted);\">You scored " +
+      data.score + "/" + data.total + " — here's what to review:</p>" +
+      "<p style=\"margin:0;color:var(--text-muted);\">" + escapeHtml(data.intro) + "</p></div>"
+    );
+    for (var si = 0; si < data.sections.length; si++) {
+      var sec = data.sections[si];
+      parts.push(
+        "<div style=\"margin:1rem 0;padding-top:" + (si > 0 ? "1rem" : "0") + ";border-top:" +
+        (si > 0 ? "1px solid rgba(255,255,255,0.08)" : "none") + ";\">" +
+        "<div style=\"color:var(--cyan);font-size:1rem;font-weight:700;margin-bottom:0.5rem;\">" +
+        escapeHtml(sec.topic) + "</div>" +
+        "<p style=\"margin:0 0 0.5rem;font-style:italic;color:var(--text-muted);\">" +
+        escapeHtml(sec.question) + "</p>" +
+        "<p style=\"margin:0 0 0.5rem;color:#30a46c;font-weight:600;\">✓ Correct answer: " +
+        escapeHtml(sec.correctAnswer) + "</p>" +
+        "<p style=\"margin:0 0 0.75rem;color:var(--text-muted);font-size:0.9rem;\">" +
+        escapeHtml(sec.explanation) + "</p>" +
+        "<a href=\"" + studyUrl + "\" target=\"_blank\" rel=\"noopener noreferrer\" " +
+        "style=\"color:var(--cyan);font-size:0.9rem;\">Study this →</a></div>"
+      );
+    }
+    parts.push(
+      "<p style=\"margin:1.25rem 0 1rem;color:var(--text-muted);\">" + escapeHtml(data.summary) + "</p>" +
+      "<button type=\"button\" class=\"btn btn-primary\" id=\"btn-retake-module-quiz\">Retake Quiz</button>"
+    );
+    main.innerHTML = parts.join("");
+    var retakeBtn = document.getElementById("btn-retake-module-quiz");
+    if (retakeBtn) {
+      retakeBtn.addEventListener("click", function () {
+        state._moduleRecoveryBadge = false;
+        state._lessonIndex = 4;
+        renderModuleScreen(skillName);
+      });
+    }
+    main.scrollTop = 0;
   }
 
   function renderModuleMain(moduleName, lessonIdx) {
     var main = document.getElementById("module-lesson-main");
     if (!main) return;
+    if (state._moduleRecoveryBadge) {
+      renderRecoveryLesson(moduleName);
+      return;
+    }
     var body = getLessonBody(moduleName, lessonIdx);
     var completed = getModuleCompletedIndices(moduleName);
     var isDone = completed.indexOf(lessonIdx) !== -1;
@@ -7658,8 +7759,22 @@ function startScanSequence() {
         var pass = correct >= passThreshold;
         var msg = pass ? "Great work! Module complete." : "We'll add a recovery module to your dashboard";
         if (!pass) {
+          var wrongTopics = [];
+          for (var wi = 0; wi < qsQuizRef.length; wi++) {
+            if (quizAnswers[wi] !== qsQuizRef[wi].correctIndex) {
+              wrongTopics.push({
+                topic: qsQuizRef[wi].topic || qsQuizRef[wi].question.slice(0, 50),
+                question: qsQuizRef[wi].question,
+                correctAnswer: qsQuizRef[wi].options[qsQuizRef[wi].correctIndex],
+                explanation: qsQuizRef[wi].explanation || ""
+              });
+            }
+          }
           try {
-            localStorage.setItem("pathwayai_recovery_" + moduleName, "1");
+            localStorage.setItem(
+              "pathwayai_recovery_" + moduleName,
+              JSON.stringify({ wrongTopics: wrongTopics, score: correct, total: total })
+            );
           } catch (eR) {}
         }
         if (resultEl) {
@@ -7689,11 +7804,22 @@ function startScanSequence() {
       }
     }
     var counts = moduleProgressCounts(moduleName);
-    if (progEl) progEl.textContent = counts.done + " of 5 lessons complete";
+    if (progEl) {
+      progEl.textContent = state._moduleRecoveryBadge
+        ? "Recovery lesson"
+        : counts.done + " of 5 lessons complete";
+    }
     var li = Math.max(0, Math.min(4, typeof state._lessonIndex === "number" ? state._lessonIndex : 0));
     state._lessonIndex = li;
     var completed = getModuleCompletedIndices(moduleName);
-    renderModuleLessonNav(moduleName, li, completed);
+    if (!state._moduleRecoveryBadge) {
+      renderModuleLessonNav(moduleName, li, completed);
+    } else {
+      var navR = document.getElementById("module-lesson-nav");
+      var stripR = document.getElementById("module-lesson-nav-strip");
+      if (navR) navR.innerHTML = "";
+      if (stripR) stripR.innerHTML = "";
+    }
     renderModuleMain(moduleName, li);
   }
 
@@ -7724,7 +7850,17 @@ function startScanSequence() {
         var key = localStorage.key(i);
         if (key && key.startsWith("pathwayai_recovery_")) {
           var skillName = decodeURIComponent(key.replace("pathwayai_recovery_", ""));
-          recovery.push(skillName);
+          var missedCount = null;
+          try {
+            var raw = localStorage.getItem(key);
+            if (raw) {
+              var parsed = JSON.parse(raw);
+              if (parsed && typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) && Array.isArray(parsed.wrongTopics)) {
+                missedCount = parsed.wrongTopics.length;
+              }
+            }
+          } catch (eP) {}
+          recovery.push({ name: skillName, missedCount: missedCount });
         }
       }
     } catch (e) {}
@@ -7954,15 +8090,22 @@ function startScanSequence() {
         "<h3 style='font-size:1rem;margin:0 0 1rem;color:var(--text-muted);'>" +
         "⚠️ Recovery modules — revisit these topics</h3>" +
         "<div class='modules-grid'>" +
-        recoverySkills.map(function (skillName) {
+        recoverySkills.map(function (entry) {
+          var skillName = entry && typeof entry === "object" && entry.name ? entry.name : String(entry || "");
+          var missedN = entry && typeof entry === "object" && typeof entry.missedCount === "number" ? entry.missedCount : null;
           var encName = encodeURIComponent("RECOVERY: " + skillName);
+          var desc =
+            missedN != null
+              ? "You got " + missedN + " questions wrong on " + skillName + ". " +
+                "This recovery lesson covers only those topics."
+              : "You scored below the passing threshold on this module quiz. " +
+                "Review the core concepts and try again.";
           return "<div class='module-card' style='border:1.5px solid #e5484d;'>" +
             "<div style='display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;'>" +
             "<span style='background:#e5484d;color:#fff;font-size:0.65rem;font-weight:700;" +
             "padding:2px 8px;border-radius:20px;letter-spacing:0.05em;'>RECOVERY</span>" +
             "<h4 style='margin:0;'>" + escapeHtml(skillName) + "</h4></div>" +
-            "<p class='desc'>You scored below the passing threshold on this module quiz. " +
-            "Review the core concepts and try again.</p>" +
+            "<p class='desc'>" + escapeHtml(desc) + "</p>" +
             "<div class='module-meta'>" +
             "<span style='color:var(--text-muted);'>~30 min review</span>" +
             "<span class='diff-badge beginner'>Review</span></div>" +
@@ -8047,71 +8190,71 @@ function startScanSequence() {
     var n = String(skillName || "").toLowerCase();
     if (n.indexOf("devops") !== -1 || n.indexOf("reliability") !== -1) {
       return [
-        { question: "Which practice treats servers as cattle, not pets?", options: ["Manual SSH fixes only", "Immutable infrastructure & automation", "Deploying from USB sticks", "Ignoring monitoring alerts"], correctIndex: 1 },
-        { question: "What is the primary role of a CI pipeline?", options: ["Replace code review", "Automate build, test, and integration checks", "Store passwords in plaintext", "Generate marketing copy"], correctIndex: 1 },
-        { question: "Why use infrastructure-as-code (e.g. Terraform)?", options: ["To avoid version control", "To declare reproducible environments", "To remove the need for backups", "To disable rollbacks"], correctIndex: 1 }
+        { question: "Which practice treats servers as cattle, not pets?", options: ["Manual SSH fixes only", "Immutable infrastructure & automation", "Deploying from USB sticks", "Ignoring monitoring alerts"], correctIndex: 1, topic: "Immutable Infrastructure", explanation: "Immutable infrastructure replaces failed or outdated instances instead of endless manual patching." },
+        { question: "What is the primary role of a CI pipeline?", options: ["Replace code review", "Automate build, test, and integration checks", "Store passwords in plaintext", "Generate marketing copy"], correctIndex: 1, topic: "CI/CD", explanation: "CI automates building and testing so integration issues surface before production." },
+        { question: "Why use infrastructure-as-code (e.g. Terraform)?", options: ["To avoid version control", "To declare reproducible environments", "To remove the need for backups", "To disable rollbacks"], correctIndex: 1, topic: "Infrastructure as Code", explanation: "IaC stores environment definitions in version control for repeatable, auditable changes." }
       ];
     }
     if (n.indexOf("data structure") !== -1) {
       return [
-        { question: "Average time complexity of lookup in a balanced BST?", options: ["O(n)", "O(log n)", "O(1) always", "O(n^2)"], correctIndex: 1 },
-        { question: "Which structure is best for LIFO operations?", options: ["Queue", "Stack", "Heap", "Graph"], correctIndex: 1 },
-        { question: "What does a hash map trade off for O(1) average lookups?", options: ["Nothing", "Extra memory and collision handling", "Sorted order guarantee", "Immutable keys only"], correctIndex: 1 }
+        { question: "Average time complexity of lookup in a balanced BST?", options: ["O(n)", "O(log n)", "O(1) always", "O(n^2)"], correctIndex: 1, topic: "Balanced Trees", explanation: "Height stays logarithmic in a balanced BST so lookup is O(log n)." },
+        { question: "Which structure is best for LIFO operations?", options: ["Queue", "Stack", "Heap", "Graph"], correctIndex: 1, topic: "Stack vs Queue", explanation: "A stack is the standard LIFO structure for undo-style and nested processing." },
+        { question: "What does a hash map trade off for O(1) average lookups?", options: ["Nothing", "Extra memory and collision handling", "Sorted order guarantee", "Immutable keys only"], correctIndex: 1, topic: "Hash Tables", explanation: "Hash maps spend memory on buckets and need collision strategies to keep averages low." }
       ];
     }
     if (n.indexOf("system design") !== -1) {
       return [
-        { question: "Why shard a database?", options: ["To remove backups", "To scale writes/reads beyond one machine", "To disable caching", "To avoid APIs"], correctIndex: 1 },
-        { question: "What is load balancing mainly for?", options: ["Encrypting static files", "Distributing traffic across instances", "Removing DNS", "Deleting logs"], correctIndex: 1 },
-        { question: "What does eventual consistency imply?", options: ["Writes never succeed", "Replicas may lag briefly but converge", "Strong ACID on every read globally always", "No need for IDs"], correctIndex: 1 }
+        { question: "Why shard a database?", options: ["To remove backups", "To scale writes/reads beyond one machine", "To disable caching", "To avoid APIs"], correctIndex: 1, topic: "Database Sharding", explanation: "Sharding partitions data so no single node must hold or serve the entire dataset." },
+        { question: "What is load balancing mainly for?", options: ["Encrypting static files", "Distributing traffic across instances", "Removing DNS", "Deleting logs"], correctIndex: 1, topic: "Scaling Strategies", explanation: "Load balancers spread requests so individual servers are not overwhelmed." },
+        { question: "What does eventual consistency imply?", options: ["Writes never succeed", "Replicas may lag briefly but converge", "Strong ACID on every read globally always", "No need for IDs"], correctIndex: 1, topic: "Consistency Models", explanation: "Eventual consistency allows temporary divergence while replicas catch up over time." }
       ];
     }
     if (n.indexOf("sql") !== -1 || n.indexOf("modeling") !== -1) {
       return [
-        { question: "What does normalization primarily reduce?", options: ["Query speed always", "Redundant update anomalies", "Need for indexes", "Primary keys"], correctIndex: 1 },
-        { question: "What is a foreign key?", options: ["A backup server", "A reference to another table's row", "A random UUID with no meaning", "An encrypted password column"], correctIndex: 1 },
-        { question: "Why use indexes?", options: ["To duplicate all rows", "To speed up lookups at some write cost", "To remove joins", "To drop tables"], correctIndex: 1 }
+        { question: "What does normalization primarily reduce?", options: ["Query speed always", "Redundant update anomalies", "Need for indexes", "Primary keys"], correctIndex: 1, topic: "Normalization", explanation: "Normalization splits redundant data so updates do not create inconsistent copies." },
+        { question: "What is a foreign key?", options: ["A backup server", "A reference to another table's row", "A random UUID with no meaning", "An encrypted password column"], correctIndex: 1, topic: "SQL Relationships", explanation: "A foreign key references a row in another table, typically matched by primary key." },
+        { question: "Why use indexes?", options: ["To duplicate all rows", "To speed up lookups at some write cost", "To remove joins", "To drop tables"], correctIndex: 1, topic: "Indexes", explanation: "Indexes trade extra storage and slower writes for faster targeted reads." }
       ];
     }
     if (n.indexOf("machine learning") !== -1 || n.indexOf("ml ") !== -1) {
       return [
-        { question: "What is overfitting?", options: ["Model too simple", "Model memorizes training noise", "Too little data always", "Training too fast"], correctIndex: 1 },
-        { question: "What is a validation set used for?", options: ["Final production scoring only", "Tuning without peeking at test", "Replacing training data", "Deleting labels"], correctIndex: 1 },
-        { question: "Precision measures…", options: ["Total accuracy only", "Positive predictions that were correct", "Recall on negatives only", "Training loss"], correctIndex: 1 }
+        { question: "What is overfitting?", options: ["Model too simple", "Model memorizes training noise", "Too little data always", "Training too fast"], correctIndex: 1, topic: "Overfitting", explanation: "Overfitting fits noise in the training set so validation and test performance suffer." },
+        { question: "What is a validation set used for?", options: ["Final production scoring only", "Tuning without peeking at test", "Replacing training data", "Deleting labels"], correctIndex: 1, topic: "Validation Set", explanation: "The validation set guides hyperparameter choices without biasing final test metrics." },
+        { question: "Precision measures…", options: ["Total accuracy only", "Positive predictions that were correct", "Recall on negatives only", "Training loss"], correctIndex: 1, topic: "Model Evaluation", explanation: "Precision is the fraction of positive predictions that were actually positive." }
       ];
     }
     if (n.indexOf("code quality") !== -1) {
       return [
-        { question: "What does SOLID mainly promote?", options: ["One giant function", "Maintainable object-oriented design", "No tests", "Copy-paste reuse"], correctIndex: 1 },
-        { question: "Why write unit tests?", options: ["To slow teams down", "To catch regressions early", "To avoid CI", "To delete documentation"], correctIndex: 1 },
-        { question: "What is refactoring?", options: ["Rewriting with no tests", "Improving structure without changing behavior", "Adding bugs intentionally", "Deleting dependencies blindly"], correctIndex: 1 }
+        { question: "What does SOLID mainly promote?", options: ["One giant function", "Maintainable object-oriented design", "No tests", "Copy-paste reuse"], correctIndex: 1, topic: "Best Practice", explanation: "SOLID principles reduce coupling and make object-oriented code easier to change safely." },
+        { question: "Why write unit tests?", options: ["To slow teams down", "To catch regressions early", "To avoid CI", "To delete documentation"], correctIndex: 1, topic: "Fundamentals", explanation: "Unit tests pin behavior so refactors and new code do not silently break old paths." },
+        { question: "What is refactoring?", options: ["Rewriting with no tests", "Improving structure without changing behavior", "Adding bugs intentionally", "Deleting dependencies blindly"], correctIndex: 1, topic: "Core Concept", explanation: "Refactoring restructures code while preserving externally observable behavior." }
       ];
     }
     if (n.indexOf("statistic") !== -1) {
       return [
-        { question: "What does standard deviation describe?", options: ["Central tendency only", "Spread of a distribution", "Always max value", "Correlation causation"], correctIndex: 1 },
-        { question: "A p-value helps assess…", options: ["Business revenue", "Evidence against a null hypothesis", "GPU memory", "SQL joins"], correctIndex: 1 },
-        { question: "Correlation implies causation when…", options: ["Always", "Almost never without controlled study", "Only if r>0.9", "Only for pie charts"], correctIndex: 1 }
+        { question: "What does standard deviation describe?", options: ["Central tendency only", "Spread of a distribution", "Always max value", "Correlation causation"], correctIndex: 1, topic: "Core Concept", explanation: "Standard deviation quantifies how far values typically deviate from the mean." },
+        { question: "A p-value helps assess…", options: ["Business revenue", "Evidence against a null hypothesis", "GPU memory", "SQL joins"], correctIndex: 1, topic: "Fundamentals", explanation: "A small p-value suggests the observed data would be rare if the null were true." },
+        { question: "Correlation implies causation when…", options: ["Always", "Almost never without controlled study", "Only if r>0.9", "Only for pie charts"], correctIndex: 1, topic: "Best Practice", explanation: "Correlation alone cannot prove causation; confounders can produce spurious relationships." }
       ];
     }
     if (n.indexOf("visualization") !== -1) {
       return [
-        { question: "When are pie charts often poor?", options: ["Never", "Many similar slices / precise comparison", "Only for 2 slices", "Only in dark mode"], correctIndex: 1 },
-        { question: "What is a core dashboard principle?", options: ["Maximize chartjunk", "Align charts to the decision being made", "Hide units", "Use 3D for everything"], correctIndex: 1 },
-        { question: "Color in charts should mainly…", options: ["Decorate randomly", "Encode meaning consistently", "Match brand only", "Maximize brightness"], correctIndex: 1 }
+        { question: "When are pie charts often poor?", options: ["Never", "Many similar slices / precise comparison", "Only for 2 slices", "Only in dark mode"], correctIndex: 1, topic: "Best Practice", explanation: "Humans compare angles poorly when slices are many or similarly sized." },
+        { question: "What is a core dashboard principle?", options: ["Maximize chartjunk", "Align charts to the decision being made", "Hide units", "Use 3D for everything"], correctIndex: 1, topic: "Core Concept", explanation: "Every chart should answer a specific decision or question for the viewer." },
+        { question: "Color in charts should mainly…", options: ["Decorate randomly", "Encode meaning consistently", "Match brand only", "Maximize brightness"], correctIndex: 1, topic: "Fundamentals", explanation: "Consistent color mapping lets viewers decode categories and ranges reliably." }
       ];
     }
     if (n.indexOf("collaboration") !== -1) {
       return [
-        { question: "What makes async collaboration effective?", options: ["No written decisions", "Clear owners and documented outcomes", "Avoiding standups entirely", "Infinite reply-all"], correctIndex: 1 },
-        { question: "Good feedback is usually…", options: ["Only annual", "Specific, timely, and actionable", "Only positive", "Anonymous always"], correctIndex: 1 },
-        { question: "RACI clarifies…", options: ["Budget only", "Who is responsible vs consulted", "Office seating", "Pay grades only"], correctIndex: 1 }
+        { question: "What makes async collaboration effective?", options: ["No written decisions", "Clear owners and documented outcomes", "Avoiding standups entirely", "Infinite reply-all"], correctIndex: 1, topic: "Best Practice", explanation: "Written ownership and decisions prevent duplicate work and stale assumptions." },
+        { question: "Good feedback is usually…", options: ["Only annual", "Specific, timely, and actionable", "Only positive", "Anonymous always"], correctIndex: 1, topic: "Core Concept", explanation: "Actionable feedback names behavior, impact, and a path to improve." },
+        { question: "RACI clarifies…", options: ["Budget only", "Who is responsible vs consulted", "Office seating", "Pay grades only"], correctIndex: 1, topic: "Fundamentals", explanation: "RACI assigns responsibility and consultation roles so decisions do not stall." }
       ];
     }
     return [
-      { question: "What is the fastest way to improve a skill gap?", options: ["Only watch videos", "Deliberate practice on realistic tasks", "Avoid feedback", "Memorize buzzwords"], correctIndex: 1 },
-      { question: "Why tie learning to your target role?", options: ["It is optional", "Interviewers test applied judgment", "Theory alone guarantees offers", "Certificates replace projects"], correctIndex: 1 },
-      { question: "What signals readiness to hiring managers?", options: ["Buzzwords only", "Artifacts: repos, metrics, or demos", "Large follower count", "Long resumes only"], correctIndex: 1 }
+      { question: "What is the fastest way to improve a skill gap?", options: ["Only watch videos", "Deliberate practice on realistic tasks", "Avoid feedback", "Memorize buzzwords"], correctIndex: 1, topic: "Core Concept", explanation: "Deliberate practice on realistic tasks builds transferable skill faster than passive watching." },
+      { question: "Why tie learning to your target role?", options: ["It is optional", "Interviewers test applied judgment", "Theory alone guarantees offers", "Certificates replace projects"], correctIndex: 1, topic: "Best Practice", explanation: "Role-aligned learning targets the tradeoffs and artifacts interviewers actually probe." },
+      { question: "What signals readiness to hiring managers?", options: ["Buzzwords only", "Artifacts: repos, metrics, or demos", "Large follower count", "Long resumes only"], correctIndex: 1, topic: "Fundamentals", explanation: "Concrete artifacts prove you can ship, measure, and explain your work." }
     ];
   }
 
