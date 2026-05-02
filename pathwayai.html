@@ -2063,6 +2063,75 @@
       font-size: 10px;
       color: #aaaaaa;
     }
+    .module-yt-card-thumb {
+      display: flex;
+      align-items: center;
+      max-width: 480px;
+      background: #ffffff;
+      border: 0.5px solid #ede9e0;
+      border-radius: 12px;
+      overflow: hidden;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color 0.15s;
+    }
+    .module-yt-card-thumb:hover {
+      border-color: #d4cfc6;
+    }
+    .module-yt-thumb-wrap {
+      position: relative;
+      flex-shrink: 0;
+      min-width: 140px;
+      width: 140px;
+      height: 84px;
+      overflow: hidden;
+      background: #f5f5f5;
+    }
+    .module-yt-thumb-wrap img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .module-yt-thumb-fallback {
+      display: none;
+      position: absolute;
+      inset: 0;
+      align-items: center;
+      justify-content: center;
+      background: #f3f1ed;
+    }
+    .module-yt-thumb-fallback svg {
+      width: 36px;
+      height: 36px;
+      display: block;
+    }
+    .module-yt-thumb-play-veil {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.18);
+      pointer-events: none;
+    }
+    .module-yt-thumb-meta {
+      padding: 0 14px;
+      flex: 1;
+      min-width: 0;
+    }
+    .module-yt-thumb-title {
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.35;
+      color: var(--text-primary);
+    }
+    .module-yt-thumb-channel {
+      margin-top: 4px;
+      font-size: 12px;
+      line-height: 1.35;
+      color: #888888;
+    }
     .module-practice-card {
       margin: 1rem 0;
       padding: 12px;
@@ -2281,6 +2350,40 @@
       font-size: 0.9rem;
     }
 
+    #screen-4-ready .profile-ready-loading-state {
+      text-align: center;
+      padding: 1.5rem 1rem 2rem;
+    }
+
+    #screen-4-ready .profile-ready-loading-pulse {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: center;
+      align-items: center;
+      margin-top: 0.35rem;
+    }
+
+    #screen-4-ready .profile-ready-pulse-bar {
+      width: 56px;
+      height: 8px;
+      border-radius: 4px;
+      background: var(--border);
+      animation: profile-ready-pulse 1.2s ease-in-out infinite;
+    }
+
+    #screen-4-ready .profile-ready-pulse-bar:nth-child(2) {
+      animation-delay: 0.15s;
+    }
+
+    #screen-4-ready .profile-ready-pulse-bar:nth-child(3) {
+      animation-delay: 0.3s;
+    }
+
+    @keyframes profile-ready-pulse {
+      0%, 100% { opacity: 0.35; }
+      50% { opacity: 1; }
+    }
+
     .profile-ready-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -2468,7 +2571,6 @@
     }
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="https://cdn.insforge.dev/insforge-js/v2/insforge.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <!-- PDF.js: loaded at parse time from CDN fallback chain (see parsePDFFile). -->
 </head>
 <body>
@@ -2737,7 +2839,9 @@
             <div class="drop-zone" id="resume-drop">Drop your PDF or Word file here or click to browse</div>
             <div id="resume-parse-ui" style="margin-top:0.75rem;display:none;align-items:center;gap:0.6rem;color:var(--text-muted);font-size:0.9rem;">
               <div class="spinner" id="resume-parse-spinner" aria-hidden="true" style="width:18px;height:18px;border-width:2px;"></div>
-              <span id="resume-parse-status">Reading your resume…</span>
+              <span id="resume-parse-success-icon" style="display:none;width:18px;height:18px;min-width:18px;border-radius:50%;background:var(--green-bg);color:var(--green-text);font-size:12px;font-weight:700;line-height:18px;text-align:center;flex-shrink:0;" aria-hidden="true">✓</span>
+              <span id="resume-parse-warn-icon" style="display:none;width:18px;height:18px;min-width:18px;border-radius:50%;background:var(--yellow-bg);color:var(--yellow-text);font-size:11px;line-height:18px;text-align:center;flex-shrink:0;" aria-hidden="true">⚠</span>
+              <span id="resume-parse-status">Parsing resume...</span>
             </div>
             <div id="resume-session-chooser" style="display:none;margin-top:0.75rem;" aria-hidden="true">
               <p class="auth-hint" id="resume-session-chooser-line" style="display:block;">Resume from last session</p>
@@ -2869,8 +2973,16 @@
       <div class="screen-body profile-ready-body">
         <h2 class="display profile-ready-title">Your profile is ready.</h2>
         <p class="profile-ready-lead">Here’s what we captured so far. You can refine this later.</p>
-        <p id="profile-ready-ai-loading" class="profile-ready-ai-msg" style="display:none;" aria-live="polite">Analyzing your resume with AI...</p>
+        <div id="profile-ready-loading-state" class="profile-ready-loading-state" style="display:none;" aria-busy="false" aria-live="polite">
+          <p class="profile-ready-ai-msg" style="margin:0 0 0.75rem;">Analyzing your resume with AI...</p>
+          <div class="profile-ready-loading-pulse" aria-hidden="true">
+            <span class="profile-ready-pulse-bar"></span>
+            <span class="profile-ready-pulse-bar"></span>
+            <span class="profile-ready-pulse-bar"></span>
+          </div>
+        </div>
 
+        <div id="profile-ready-cards-wrap">
         <div class="profile-ready-grid">
           <div class="stat-card profile-ready-summary-card profile-ready-panel">
             <h3 class="profile-ready-panel-title">Summary</h3>
@@ -2882,6 +2994,7 @@
             <p id="profile-ready-snap-note" class="profile-ready-snap-note">Based on your resume only — scores will be refined after your assessment</p>
             <div id="profile-ready-bars"></div>
           </div>
+        </div>
         </div>
 
         <div class="solar-assessment-banner">
@@ -3600,6 +3713,36 @@
       return null;
     }
   }
+  function setResumeParseIndicator(mode) {
+    var sp = document.getElementById("resume-parse-spinner");
+    var ok = document.getElementById("resume-parse-success-icon");
+    var wrn = document.getElementById("resume-parse-warn-icon");
+    if (!sp || !ok || !wrn) return;
+    if (mode === "loading") {
+      sp.style.display = "block";
+      sp.style.borderColor = "";
+      sp.style.borderTopColor = "";
+      ok.style.display = "none";
+      wrn.style.display = "none";
+    } else if (mode === "success") {
+      sp.style.display = "none";
+      ok.style.display = "inline-flex";
+      ok.style.alignItems = "center";
+      ok.style.justifyContent = "center";
+      wrn.style.display = "none";
+    } else if (mode === "warn") {
+      sp.style.display = "none";
+      ok.style.display = "none";
+      wrn.style.display = "inline-flex";
+      wrn.style.alignItems = "center";
+      wrn.style.justifyContent = "center";
+    } else {
+      sp.style.display = "none";
+      ok.style.display = "none";
+      wrn.style.display = "none";
+    }
+  }
+
   function resetScreen4UploadVisualOnly() {
     var drop = document.getElementById("resume-drop");
     if (drop) {
@@ -3609,12 +3752,7 @@
     if (ui) ui.style.display = "none";
     var st = document.getElementById("resume-parse-status");
     if (st) st.textContent = "";
-    var sp = document.getElementById("resume-parse-spinner");
-    if (sp) {
-      sp.style.display = "none";
-      sp.style.borderColor = "";
-      sp.style.borderTopColor = "";
-    }
+    setResumeParseIndicator("hidden");
     try { state._resumeFileLabel = null; } catch (e) {}
   }
   function resetScreen4ResumeUi() {
@@ -3625,13 +3763,8 @@
     var ui = document.getElementById("resume-parse-ui");
     if (ui) ui.style.display = "none";
     var st = document.getElementById("resume-parse-status");
-    if (st) st.textContent = "Reading your resume…";
-    var sp = document.getElementById("resume-parse-spinner");
-    if (sp) {
-      sp.style.display = "none";
-      sp.style.borderColor = "";
-      sp.style.borderTopColor = "";
-    }
+    if (st) st.textContent = "Parsing resume...";
+    setResumeParseIndicator("hidden");
     var rsc = document.getElementById("resume-session-chooser");
     if (rsc) {
       rsc.style.display = "none";
@@ -3690,12 +3823,7 @@
       if (ui2) ui2.style.display = "flex";
       var st2 = document.getElementById("resume-parse-status");
       if (st2) st2.textContent = "Resume parsed successfully";
-      var sp2 = document.getElementById("resume-parse-spinner");
-      if (sp2) {
-        sp2.style.display = "block";
-        sp2.style.borderColor = "rgba(34,197,94,0.35)";
-        sp2.style.borderTopColor = "#22c55e";
-      }
+      setResumeParseIndicator("success");
       return;
     }
     }
@@ -3911,6 +4039,11 @@ function assessmentMatchesSession(c) {
 
   function showScreen(id, navOpts) {
     navOpts = navOpts || {};
+    if (id === "screen-1") {
+      try {
+        localStorage.removeItem("pathwayai_current_screen");
+      } catch (e) {}
+    }
     if (id === "screen-5" && !navOpts.skipAssessmentCache) {
       var cached = loadAssessmentStorage();
       if (cached && assessmentMatchesSession(cached)) {
@@ -3989,6 +4122,16 @@ function assessmentMatchesSession(c) {
       } else {
         backBtn.onclick = null;
       }
+    }
+
+    var RESTORABLE_SCREENS = [
+      "screen-2", "screen-3", "screen-4", "screen-4-5",
+      "screen-5", "screen-6", "screen-7"
+    ];
+    if (RESTORABLE_SCREENS.indexOf(id) !== -1) {
+      try {
+        localStorage.setItem("pathwayai_current_screen", id);
+      } catch (e) {}
     }
   }
 
@@ -4159,11 +4302,17 @@ function assessmentMatchesSession(c) {
     var so = document.getElementById('btn-signout');
     if (so) so.style.display = 'none';
     try { resetScreen4ResumeUi(); } catch (e) {}
+    try {
+      localStorage.removeItem("pathwayai_current_screen");
+    } catch (e) {}
     showScreen("screen-1", { skipAssessmentCache: true });
   });
 
   /* ——— Screen 1 ——— */
   function goToGoalsAfterAuth() {
+    try {
+      localStorage.removeItem("pathwayai_current_screen");
+    } catch (e) {}
     showScreen("screen-2");
     syncGoalFormFromState();
     var ri = document.getElementById("goal-role-input");
@@ -4854,12 +5003,21 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
     } catch (err) {}
 
     var summary = document.getElementById("profile-ready-summary");
-    var aiLoadEl = document.getElementById("profile-ready-ai-loading");
+    var loadingStateEl = document.getElementById("profile-ready-loading-state");
+    var cardsWrapEl = document.getElementById("profile-ready-cards-wrap");
     if (summary) {
       var rawResumeText = resolveRawResumeTextForProfile();
       var showAiLoading = !!(rawResumeText && String(rawResumeText).trim().length >= 50);
-      if (aiLoadEl) {
-        aiLoadEl.style.display = showAiLoading ? "block" : "none";
+      if (loadingStateEl && cardsWrapEl) {
+        if (showAiLoading) {
+          loadingStateEl.style.display = "block";
+          loadingStateEl.setAttribute("aria-busy", "true");
+          cardsWrapEl.style.display = "none";
+        } else {
+          loadingStateEl.style.display = "none";
+          loadingStateEl.setAttribute("aria-busy", "false");
+          cardsWrapEl.style.display = "";
+        }
       }
       try {
         var inferred = await inferResumeDisplayFromText(rawResumeText);
@@ -4880,45 +5038,44 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
 
       function formatEduItem(x) {
         if (!x) return "";
-        if (typeof x === "string") return clampSummaryLine(x, 96);
-        if (x.school || x.degree) {
-          return clampSummaryLine([x.degree, x.school, x.year].filter(Boolean).join(" — ") || (x.school || ""), 96);
-        }
-        return "";
+        var line = formatProfileReadyEducationEntry(x);
+        return line ? clampSummaryLine(line, 96) : "";
       }
       function formatExpItem(x) {
         if (!x) return "";
-        if (typeof x === "string") return clampSummaryLine(x, 96);
-        if (x.role || x.company) {
-          return clampSummaryLine((x.role || "") + " at " + (x.company || "") + (x.duration ? " " + x.duration : ""), 96);
-        }
-        return "";
+        var line = formatProfileReadyExperienceEntry(x);
+        return line ? clampSummaryLine(line, 96) : "";
+      }
+      function formatProjItem(p) {
+        if (!p) return "";
+        var line = formatProfileReadyProjectEntry(p);
+        return line ? clampSummaryLine(line, 96) : "";
       }
 
       var isResumeMode = !isLIEx && state.profileMode === "resume";
 
       var eduLines = [];
-      if (isResumeMode) {
+        if (isResumeMode) {
         if (inferred.educationLines && inferred.educationLines.length) {
           eduLines = inferred.educationLines.slice(0, 2).map(function (x) {
-            return clampSummaryLine(String(x), 96);
+            return formatEduItem(x);
           }).filter(function (L) { return L && L.length; });
         }
         if (!eduLines.length && parsed && parsed.education && parsed.education.length) {
           eduLines = parsed.education.slice(0, 2).map(formatEduItem).filter(function (L) { return L && L.length; });
         }
         if (!eduLines.length && parsed && parsed.educationDisplay && parsed.educationDisplay.length) {
-          eduLines = parsed.educationDisplay.slice(0, 2).map(function (x) { return clampSummaryLine(String(x), 96); });
+          eduLines = parsed.educationDisplay.slice(0, 2).map(formatEduItem).filter(function (L) { return L && L.length; });
         }
       } else {
         if (parsed && parsed.education && parsed.education.length) {
           eduLines = parsed.education.slice(0, 2).map(formatEduItem).filter(function (L) { return L && L.length; });
         } else if (parsed && parsed.educationDisplay && parsed.educationDisplay.length) {
-          eduLines = parsed.educationDisplay.slice(0, 2).map(function (x) { return clampSummaryLine(String(x), 96); });
+          eduLines = parsed.educationDisplay.slice(0, 2).map(formatEduItem).filter(function (L) { return L && L.length; });
         }
         if (!eduLines.length && inferred.educationLines.length) {
           eduLines = inferred.educationLines.slice(0, 2).map(function (x) {
-            return clampSummaryLine(String(x), 96);
+            return formatEduItem(x);
           }).filter(function (L) { return L && L.length; });
         }
       }
@@ -4928,24 +5085,24 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
       if (isResumeMode) {
         if (inferred.experienceLines && inferred.experienceLines.length) {
           expLines = inferred.experienceLines.slice(0, expMax).map(function (x) {
-            return clampSummaryLine(String(x), 96);
+            return formatExpItem(x);
           }).filter(function (L) { return L && L.length; });
         }
         if (!expLines.length && parsed && parsed.experience && parsed.experience.length) {
           expLines = parsed.experience.slice(0, expMax).map(formatExpItem).filter(function (L) { return L && L.length; });
         }
         if (!expLines.length && parsed && parsed.experienceDisplay && parsed.experienceDisplay.length) {
-          expLines = parsed.experienceDisplay.slice(0, expMax).map(function (x) { return clampSummaryLine(String(x), 96); });
+          expLines = parsed.experienceDisplay.slice(0, expMax).map(formatExpItem).filter(function (L) { return L && L.length; });
         }
       } else {
         if (parsed && parsed.experience && parsed.experience.length) {
           expLines = parsed.experience.slice(0, expMax).map(formatExpItem).filter(function (L) { return L && L.length; });
         } else if (parsed && parsed.experienceDisplay && parsed.experienceDisplay.length) {
-          expLines = parsed.experienceDisplay.slice(0, expMax).map(function (x) { return clampSummaryLine(String(x), 96); });
+          expLines = parsed.experienceDisplay.slice(0, expMax).map(formatExpItem).filter(function (L) { return L && L.length; });
         }
         if (!expLines.length && inferred.experienceLines.length) {
           expLines = inferred.experienceLines.slice(0, expMax).map(function (x) {
-            return clampSummaryLine(String(x), 96);
+            return formatExpItem(x);
           }).filter(function (L) { return L && L.length; });
         }
       }
@@ -4959,7 +5116,7 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
       if (Object.prototype.hasOwnProperty.call(mp, "education")) {
         var edM = Array.isArray(mp.education) ? mp.education : [];
         eduLines = edM.slice(0, 4).map(function (x) {
-          return clampSummaryLine(String(x), 96);
+          return formatEduItem(x);
         }).filter(function (L) {
           return L && L.length;
         });
@@ -4967,7 +5124,7 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
       if (Object.prototype.hasOwnProperty.call(mp, "experience")) {
         var exM = Array.isArray(mp.experience) ? mp.experience : [];
         expLines = exM.slice(0, expMax).map(function (x) {
-          return clampSummaryLine(String(x), 96);
+          return formatExpItem(x);
         }).filter(function (L) {
           return L && L.length;
         });
@@ -4977,13 +5134,12 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
       if (isResumeMode) {
         if (inferred.projectLines && inferred.projectLines.length) {
           projLinesLi = inferred.projectLines.slice(0, 4).map(function (x) {
-            return clampSummaryLine(String(x), 96);
+            return formatProjItem(x);
           }).filter(function (L) { return L && L.length; });
         }
         if (!projLinesLi.length && parsed && parsed.projects && parsed.projects.length) {
           projLinesLi = parsed.projects.slice(0, 6).map(function (p) {
-            if (typeof p === "string") return clampSummaryLine(p, 96);
-            return clampSummaryLine([p.title, p.name, p.role, p.description].filter(Boolean).join(" — "), 96);
+            return formatProjItem(p);
           }).filter(function (L) {
             return L && L.length;
           });
@@ -4991,22 +5147,21 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
       } else {
         if (parsed && parsed.projects && parsed.projects.length) {
           projLinesLi = parsed.projects.slice(0, 6).map(function (p) {
-            if (typeof p === "string") return clampSummaryLine(p, 96);
-            return clampSummaryLine([p.title, p.name, p.role, p.description].filter(Boolean).join(" — "), 96);
+            return formatProjItem(p);
           }).filter(function (L) {
             return L && L.length;
           });
         }
         if (!projLinesLi.length && inferred.projectLines.length) {
           projLinesLi = inferred.projectLines.slice(0, 4).map(function (x) {
-            return clampSummaryLine(String(x), 96);
+            return formatProjItem(x);
           }).filter(function (L) { return L && L.length; });
         }
       }
       if (Object.prototype.hasOwnProperty.call(mp, "projects")) {
         var pjM = Array.isArray(mp.projects) ? mp.projects : [];
         projLinesLi = pjM.slice(0, 8).map(function (x) {
-          return clampSummaryLine(String(x), 96);
+          return formatProjItem(x);
         }).filter(function (L) {
           return L && L.length;
         });
@@ -5018,7 +5173,7 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
         inferred.experienceLines.length
       ) {
         expLines = inferred.experienceLines.slice(0, expMax).map(function (x) {
-          return clampSummaryLine(String(x), 96);
+          return formatExpItem(x);
         }).filter(function (L) { return L && L.length; });
       }
       if (
@@ -5027,7 +5182,7 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
         inferred.projectLines.length
       ) {
         projLinesLi = inferred.projectLines.slice(0, 4).map(function (x) {
-          return clampSummaryLine(String(x), 96);
+          return formatProjItem(x);
         }).filter(function (L) { return L && L.length; });
       }
 
@@ -5225,8 +5380,9 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
             inferred.educationLines && inferred.educationLines.length
               ? uniqueChipsForDisplay(
                   inferred.educationLines.slice(0, 3).map(function (x) {
-                    return clampSummaryLine(String(x), 72);
-                  }),
+                    var line = formatProfileReadyEducationEntry(x);
+                    return line ? clampSummaryLine(line, 72) : "";
+                  }).filter(Boolean),
                   20
                 )
               : [];
@@ -5242,8 +5398,9 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
             inferred.experienceLines && inferred.experienceLines.length
               ? uniqueChipsForDisplay(
                   inferred.experienceLines.slice(0, 4).map(function (x) {
-                    return clampSummaryLine(String(x), 72);
-                  }),
+                    var line = formatProfileReadyExperienceEntry(x);
+                    return line ? clampSummaryLine(line, 72) : "";
+                  }).filter(Boolean),
                   24
                 )
               : [];
@@ -5259,8 +5416,9 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
             inferred.projectLines && inferred.projectLines.length
               ? uniqueChipsForDisplay(
                   inferred.projectLines.slice(0, 4).map(function (x) {
-                    return clampSummaryLine(String(x), 72);
-                  }),
+                    var line = formatProfileReadyProjectEntry(x);
+                    return line ? clampSummaryLine(line, 72) : "";
+                  }).filter(Boolean),
                   28
                 )
               : [];
@@ -5286,13 +5444,31 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
             ? parsed.projectChips
             : uniqueChipsForDisplay(projectLinesToChips((parsed && parsed.projects) || [], ""), 28);
           if ((!eduChipsR || !eduChipsR.length) && inferred.educationLines.length) {
-            eduChipsR = inferred.educationLines.slice(0, 2);
+            eduChipsR = uniqueChipsForDisplay(
+              inferred.educationLines.slice(0, 2).map(function (x) {
+                var line = formatProfileReadyEducationEntry(x);
+                return line ? clampSummaryLine(line, 72) : "";
+              }).filter(Boolean),
+              20
+            );
           }
           if ((!expChipsR || !expChipsR.length) && inferred.experienceLines.length) {
-            expChipsR = inferred.experienceLines.slice(0, 2);
+            expChipsR = uniqueChipsForDisplay(
+              inferred.experienceLines.slice(0, 2).map(function (x) {
+                var line = formatProfileReadyExperienceEntry(x);
+                return line ? clampSummaryLine(line, 72) : "";
+              }).filter(Boolean),
+              24
+            );
           }
           if ((!projChipsR || !projChipsR.length) && inferred.projectLines.length) {
-            projChipsR = inferred.projectLines.slice(0, 2);
+            projChipsR = uniqueChipsForDisplay(
+              inferred.projectLines.slice(0, 2).map(function (x) {
+                var line = formatProfileReadyProjectEntry(x);
+                return line ? clampSummaryLine(line, 72) : "";
+              }).filter(Boolean),
+              28
+            );
           }
         }
         if ((!skillChipsR || !skillChipsR.length) && inferred.skillItems.length) {
@@ -5305,8 +5481,9 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
         ) {
           expChipsR = uniqueChipsForDisplay(
             inferred.experienceLines.slice(0, 4).map(function (x) {
-              return clampSummaryLine(String(x), 72);
-            }),
+              var line = formatProfileReadyExperienceEntry(x);
+              return line ? clampSummaryLine(line, 72) : "";
+            }).filter(Boolean),
             24
           );
         }
@@ -5317,8 +5494,9 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
         ) {
           projChipsR = uniqueChipsForDisplay(
             inferred.projectLines.slice(0, 4).map(function (x) {
-              return clampSummaryLine(String(x), 72);
-            }),
+              var line = formatProfileReadyProjectEntry(x);
+              return line ? clampSummaryLine(line, 72) : "";
+            }).filter(Boolean),
             28
           );
         }
@@ -5330,7 +5508,8 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
           var edMR = Array.isArray(mp.education) ? mp.education : [];
           eduChipsR = uniqueChipsForDisplay(
             edMR.map(function (x) {
-              return clampSummaryLine(String(x), 72);
+              var line = formatProfileReadyEducationEntry(x);
+              return line ? clampSummaryLine(line, 72) : "";
             }).filter(Boolean),
             20
           );
@@ -5339,7 +5518,8 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
           var exMR = Array.isArray(mp.experience) ? mp.experience : [];
           expChipsR = uniqueChipsForDisplay(
             exMR.map(function (x) {
-              return clampSummaryLine(String(x), 72);
+              var line = formatProfileReadyExperienceEntry(x);
+              return line ? clampSummaryLine(line, 72) : "";
             }).filter(Boolean),
             24
           );
@@ -5348,7 +5528,8 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
           var pjMR = Array.isArray(mp.projects) ? mp.projects : [];
           projChipsR = uniqueChipsForDisplay(
             pjMR.map(function (x) {
-              return clampSummaryLine(String(x), 72);
+              var line = formatProfileReadyProjectEntry(x);
+              return line ? clampSummaryLine(line, 72) : "";
             }).filter(Boolean),
             28
           );
@@ -5370,7 +5551,11 @@ document.getElementById("goal-timeline-pills").addEventListener("click", functio
 
       ensureProfileReadyEditorBindings(summary);
       } finally {
-        if (aiLoadEl) aiLoadEl.style.display = "none";
+        if (loadingStateEl) {
+          loadingStateEl.style.display = "none";
+          loadingStateEl.setAttribute("aria-busy", "false");
+        }
+        if (cardsWrapEl) cardsWrapEl.style.display = "";
       }
     }
 
@@ -5744,6 +5929,67 @@ function startScanSequence() {
     return out;
   }
 
+  /** Profile-ready / chip display: structured resume rows (not data-shape changes). */
+  function formatProfileReadyEducationEntry(x) {
+    if (x == null) return "";
+    if (typeof x === "string") return String(x).replace(/\s+/g, " ").trim();
+    if (typeof x !== "object") return String(x);
+    var degree = x.degree != null ? String(x.degree).trim() : "";
+    var inst =
+      (x.institution != null && String(x.institution).trim()) ||
+      (x.school != null && String(x.school).trim()) ||
+      "";
+    var year = x.year != null ? String(x.year).trim() : "";
+    var parts = [degree, inst, year].filter(function (p) {
+      return p && p.length;
+    });
+    return parts.join(", ");
+  }
+
+  function formatProfileReadyExperienceEntry(x) {
+    if (x == null) return "";
+    if (typeof x === "string") return String(x).replace(/\s+/g, " ").trim();
+    if (typeof x !== "object") return String(x);
+    var title =
+      (x.title != null && String(x.title).trim()) ||
+      (x.role != null && String(x.role).trim()) ||
+      "";
+    var company = x.company != null ? String(x.company).trim() : "";
+    var start = x.start != null ? String(x.start).trim() : "";
+    var end = x.end != null ? String(x.end).trim() : "";
+    var dateRange = "";
+    if (start && end) dateRange = "(" + start + "–" + end + ")";
+    else if (start || end) dateRange = "(" + (start || end) + ")";
+    if (title && company && dateRange) return title + " at " + company + " " + dateRange;
+    if (title && dateRange) return title + " " + dateRange;
+    if (title && company) return title + " at " + company;
+    if (title) return title;
+    if (company && dateRange) return company + " " + dateRange;
+    return company || "";
+  }
+
+  function formatProfileReadyProjectEntry(x) {
+    if (x == null) return "";
+    if (typeof x === "string") return String(x).replace(/\s+/g, " ").trim();
+    if (typeof x !== "object") return String(x);
+    var name =
+      (x.name != null && String(x.name).trim()) ||
+      (x.title != null && String(x.title).trim()) ||
+      "";
+    var tech = x.tech;
+    var techStr = "";
+    if (Array.isArray(tech) && tech.length) {
+      techStr = tech
+        .map(function (t) {
+          return String(t).trim();
+        })
+        .filter(Boolean)
+        .join(", ");
+    }
+    if (name && techStr) return name + " — " + techStr;
+    return name || techStr || "";
+  }
+
   function uniqueChipsForDisplay(arr, cap) {
     var seen = {};
     var o = [];
@@ -5760,6 +6006,11 @@ function startScanSequence() {
   function educationDisplayToChips(eduDisplay) {
     var o = [];
     (eduDisplay || []).forEach(function (line) {
+      if (line && typeof line === "object" && !Array.isArray(line)) {
+        var fs = formatProfileReadyEducationEntry(line);
+        if (fs.length > 1 && fs.length < 100) o.push(fs);
+        return;
+      }
       String(line).split(/·|\/|–|—|\|/g).forEach(function (p) {
         p = p.replace(/\s+/g, " ").replace(/^[-–,]\s*/, "").trim();
         if (p.length > 1 && p.length < 100) o.push(p);
@@ -5770,6 +6021,11 @@ function startScanSequence() {
   function experienceDisplayToChips(expDisplay) {
     var o = [];
     (expDisplay || []).forEach(function (line) {
+      if (line && typeof line === "object" && !Array.isArray(line)) {
+        var fs = formatProfileReadyExperienceEntry(line);
+        if (fs.length > 1 && fs.length < 100) o.push(fs);
+        return;
+      }
       String(line).split("·").forEach(function (p) {
         p = p.replace(/\s+/g, " ").replace(/^[-–,]\s*/, "").trim();
         if (p.length > 1 && p.length < 100) o.push(p);
@@ -5780,6 +6036,11 @@ function startScanSequence() {
   function projectLinesToChips(projectArr, _fullLower) {
     var o = [];
     (projectArr || []).forEach(function (line) {
+      if (line && typeof line === "object" && !Array.isArray(line)) {
+        var fp = formatProfileReadyProjectEntry(line);
+        if (fp.length > 1 && fp.length < 80) o.push(fp);
+        return;
+      }
       line = String(line).replace(/^[\u2022\-\*•\s]+/, "").trim();
       if (line.length < 2) return;
       var segs = line.split(/[—|]/);
@@ -6015,14 +6276,9 @@ function startScanSequence() {
       (async function () {
         var ui = document.getElementById("resume-parse-ui");
         var status = document.getElementById("resume-parse-status");
-        var sp0 = document.getElementById("resume-parse-spinner");
         if (ui) ui.style.display = "flex";
-        if (status) status.textContent = "Reading your resume…";
-        if (sp0) {
-          sp0.style.display = "block";
-          sp0.style.borderColor = "";
-          sp0.style.borderTopColor = "";
-        }
+        if (status) status.textContent = "Parsing resume...";
+        setResumeParseIndicator("loading");
 
         var st = null;
         try { st = await uploadResumeFileToInsforgeStorage(f0); } catch (e) {}
@@ -6042,12 +6298,7 @@ function startScanSequence() {
           try { savePrelimScoresToScoped(getResumeOnlySkillSnapshot()); } catch (err) {}
 
           if (status) status.textContent = "Resume parsed successfully";
-          // swap spinner to check
-          var sp = document.getElementById("resume-parse-spinner");
-          if (sp) {
-            sp.style.borderColor = "rgba(34,197,94,0.35)";
-            sp.style.borderTopColor = "#22c55e";
-          }
+          setResumeParseIndicator("success");
 
           // If the resume likely contains a name, use it to personalize.
           if (parsed.name && (!state.displayName || state.displayName === "there")) {
@@ -6055,7 +6306,8 @@ function startScanSequence() {
             saveAppState({ displayName: state.displayName });
           }
         } else {
-          if (status) status.textContent = "Could not read this file";
+          if (status) status.textContent = "Could not parse resume";
+          setResumeParseIndicator("warn");
         }
       })();
     }
@@ -7011,12 +7263,34 @@ function startScanSequence() {
   }
   window.pathwayaiTakeAssessment = pathwayaiTakeAssessment;
 
-  function pathwayaiSkipToDashboard() {
+  async function pathwayaiSkipToDashboard() {
     try {
       savePrelimScoresToScoped(getResumeOnlySkillSnapshot());
     } catch (e) {}
     try { localStorage.setItem("pathwayai_skipAssessment", "true"); } catch (e) {}
     saveAppState({ skippedAssessment: true });
+
+    // Build a minimal payload for gap report
+    var seed = hashStr((state.role || "") + (state.industry || "") + (state.email || ""));
+    var skills = generateSkillScores(seed);
+    var readiness = Math.round(
+      skills.reduce(function(a, b) { return a + b.pct; }, 0) / skills.length
+    );
+    var payload = {
+      version: 1,
+      email: state.email,
+      role: state.role,
+      industry: state.industry,
+      seed: seed,
+      skills: skills,
+      readiness: readiness,
+      answers: []
+    };
+
+    await fetchGapReport(payload);
+    saveAssessmentStorage(payload);
+    state.persistedDashboard = payload;
+
     showScreen("screen-6", { skipAssessmentCache: true });
   }
   window.pathwayaiSkipToDashboard = pathwayaiSkipToDashboard;
@@ -7329,6 +7603,19 @@ function startScanSequence() {
     const dreamCompanies = JSON.parse(
       localStorage.getItem('pathwayai_dreamCompanies') || '[]'
     );
+    var parsedResume = null;
+    try {
+      var pr = localStorage.getItem("pathwayai_resume_parsed");
+      if (pr) parsedResume = JSON.parse(pr);
+    } catch (e) {}
+
+    var examScoreForApi = null;
+    try {
+      var es = localStorage.getItem("pathwayai_examScore");
+      if (es != null && es !== "") examScoreForApi = parseInt(es, 10);
+    } catch (e) {}
+    if (examScoreForApi != null && isNaN(examScoreForApi)) examScoreForApi = null;
+
     var apiPayload = {
       userId: getOrCreateSessionUserId(),
       jobUrl: jobUrl != null ? jobUrl : null,
@@ -7337,13 +7624,11 @@ function startScanSequence() {
       company: dream0 || null,
       dreamCompanies: dreamCompanies,
       resumeText: getResumeTextForGapApi(),
-      assessmentAnswers: state.assessmentAnswers || []
+      assessmentAnswers: state.assessmentAnswers || [],
+      parsedResume: parsedResume,
+      assessmentScore: examScoreForApi,
+      skippedAssessment: examScoreForApi == null
     };
-    try {
-      getInsforgeClient();
-    } catch (e) {
-      return;
-    }
     try {
       console.log('Sending to backend:', {
         targetRole,
@@ -7352,19 +7637,42 @@ function startScanSequence() {
       console.log('Calling backend with companies:', 
         dreamCompanies)
       var out = await pathwayaiWorkersApiPost("/api/analyze-gap", apiPayload);
-      if (out && out.error) {
-        throw new Error(out.error.message || "insforge");
+
+      // handle both wrapped { data: ... } and unwrapped responses
+      var result = null;
+      if (out && out.data && typeof out.data === "object") {
+        result = out.data;
+      } else if (out && out.matchScore != null) {
+        result = out;
+      } else if (out && out.analysisSource) {
+        result = out;
       }
-      var result = out && out.data;
-      if (!result) throw new Error("no data");
-      if (result && result.error) {
-        throw new Error(result.error || "API error");
-      }
+
+      if (!result) throw new Error("no gap data");
+      if (result.error) throw new Error(result.error || "API error");
       try {
         localStorage.setItem("pathwayai_gapReport", JSON.stringify(result));
+        try {
+          var stored = JSON.parse(
+            localStorage.getItem("pathwayai_gapReport")
+          );
+          if (stored) {
+            stored.generatedWithExamScore = examScoreForApi;
+            localStorage.setItem(
+              "pathwayai_gapReport",
+              JSON.stringify(stored)
+            );
+          }
+        } catch (e) {}
+        // Clear AI module cache so next render regenerates with new skills
+        try {
+          var cacheKey = "pathwayai_ai_modules_" + (state.role || "general");
+          localStorage.removeItem(cacheKey);
+        } catch (e2) {}
       } catch (e) {}
       applyGapReportToPayload(payload, result);
     } catch (err) {
+      console.error("fetchGapReport failed:", err && err.message);
     }
   }
 
@@ -7417,6 +7725,15 @@ function startScanSequence() {
       readiness: readiness,
       answers: state.assessmentAnswers.slice(),
     };
+
+    // Clear stale gap report and AI module cache so
+    // assessment results trigger a fresh GPT analysis
+    try {
+      localStorage.removeItem("pathwayai_gapReport");
+      localStorage.removeItem(
+        "pathwayai_ai_modules_" + (state.role || "general")
+      );
+    } catch (e) {}
 
     await fetchGapReport(payload);
 
@@ -7690,6 +8007,17 @@ function startScanSequence() {
     return { a: "professional skills tutorial", b: "career development frameworks", c: "workplace communication skills" };
   }
 
+  function resolveYoutubeVideoId(v) {
+    if (!v || typeof v !== "object") return null;
+    var url = v.url || "";
+    if (typeof url !== "string") return null;
+    if (url.indexOf("watch?v=") === -1) return null;
+    var rest = url.split("watch?v=")[1];
+    if (!rest) return null;
+    var id = rest.split("&")[0];
+    return id && id.length ? id : null;
+  }
+
   function youtubeCardsForLesson(moduleName, lessonIdx) {
     if (state._aiModules && state._aiModules[moduleName]) {
       var aiLesson = state._aiModules[moduleName].lessons && state._aiModules[moduleName].lessons[lessonIdx];
@@ -7699,7 +8027,8 @@ function startScanSequence() {
             title: v.title,
             url: v.url,
             channel: v.channel || "",
-            dur: v.duration != null ? String(v.duration) : (v.dur != null ? String(v.dur) : "")
+            dur: v.duration != null ? String(v.duration) : (v.dur != null ? String(v.dur) : ""),
+            videoId: resolveYoutubeVideoId(v)
           };
         });
       }
@@ -7708,7 +8037,8 @@ function startScanSequence() {
           title: aiLesson.youtubeQuery,
           channel: "YouTube search",
           dur: "Search results",
-          url: ytSearchUrl(aiLesson.youtubeQuery)
+          url: ytSearchUrl(aiLesson.youtubeQuery),
+          videoId: null
         }];
       }
     }
@@ -7719,7 +8049,7 @@ function startScanSequence() {
     if (lessonIdx === 2) q1 = mod + " practical tutorial hands on";
     if (lessonIdx === 4) q1 = mod + " advanced deep dive professional";
     return [
-      { title: q1, channel: "YouTube results", dur: "Search results", url: ytSearchUrl(q1) }
+      { title: q1, channel: "YouTube results", dur: "Search results", url: ytSearchUrl(q1), videoId: null }
     ];
   }
 
@@ -8271,6 +8601,21 @@ function startScanSequence() {
     var codeHtml = body.codeBlock ? "<pre class=\"module-code-block\"><code>" + escapeHtml(String(body.codeBlock).trim()) + "</code></pre>" : "";
     var takeList = body.takeaways.map(function (t) { return "<li>" + escapeHtml(t) + "</li>"; }).join("");
     var ytHtml = yt.map(function (v) {
+      var vid = v.videoId;
+      if (vid) {
+        var watchHref = "https://www.youtube.com/watch?v=" + encodeURIComponent(vid);
+        var thumbSrc = "https://img.youtube.com/vi/" + encodeURIComponent(vid) + "/hqdefault.jpg";
+        return "<a class=\"module-yt-card-thumb\" href=\"" + watchHref + "\" target=\"_blank\" rel=\"noopener noreferrer\">" +
+          "<div class=\"module-yt-thumb-wrap\">" +
+          "<img src=\"" + thumbSrc + "\" alt=\"\" onerror=\"this.style.display='none';var n=this.nextElementSibling;if(n)n.style.display='flex';\" />" +
+          "<div class=\"module-yt-thumb-fallback\" aria-hidden=\"true\">" +
+          "<svg viewBox=\"0 0 24 24\" xmlns=\"http://www.w3.org/2000/svg\"><path d=\"M8 5v14l11-7z\" fill=\"#f97316\"/></svg></div>" +
+          "<div class=\"module-yt-thumb-play-veil\">" +
+          "<svg width=\"28\" height=\"28\" viewBox=\"0 0 28 28\" aria-hidden=\"true\"><circle cx=\"14\" cy=\"14\" r=\"14\" fill=\"rgba(0,0,0,0.55)\"/><path d=\"M11 9 L11 19 L19 14 Z\" fill=\"white\"/></svg>" +
+          "</div></div>" +
+          "<div class=\"module-yt-thumb-meta\"><div class=\"module-yt-thumb-title\">" + escapeHtml(v.title) + "</div>" +
+          "<div class=\"module-yt-thumb-channel\">" + escapeHtml(v.channel) + "</div></div></a>";
+      }
       return "<a class=\"module-yt-card\" href=\"" + escapeHtml(v.url) + "\" target=\"_blank\" rel=\"noopener noreferrer\">" +
         "<div class=\"yt-play\" aria-hidden=\"true\">▶</div>" +
         "<div class=\"yt-title\">" + escapeHtml(v.title) + "</div>" +
@@ -8319,7 +8664,7 @@ function startScanSequence() {
       "<div class=\"concept-block\">" + body.paragraphs.map(function (p) { return "<p>" + escapeHtml(p) + "</p>"; }).join("") + "</div>" +
       codeHtml +
       "<div class=\"module-takeaways\"><strong>Key takeaways</strong><ul>" + takeList + "</ul></div>" +
-      "<h4 style=\"font-size:0.9rem;margin:1rem 0 0.35rem;\">Recommended YouTube searches</h4>" +
+      "<h4 style=\"font-size:0.9rem;margin:1rem 0 0.35rem;\">Recommended YouTube</h4>" +
       "<div class=\"module-yt-grid\">" + ytHtml + "</div>" +
       "<div class=\"module-practice-card\"><strong>Practice exercise</strong><br/><label><input type=\"checkbox\" id=\"module-exercise-check\" " + (isDone ? "checked " : "") + "/><span>" + escapeHtml(body.practice) + "</span></label></div>" +
       "<h4 style=\"font-size:0.9rem;margin:1rem 0 0.35rem;\">External resources</h4>" +
@@ -8564,7 +8909,9 @@ function startScanSequence() {
     var banner = document.getElementById("dash-assess-banner");
     var skippedFlow = !!st.skippedAssessment || localStorage.getItem("pathwayai_skipAssessment") === "true";
     var takenBefore = hasEverTakenAssessment();
-    var showBanner = skippedFlow || !takenBefore;
+    var showBanner =
+      !takenBefore ||
+      (skippedFlow && !hasEverTakenAssessment());
     if (banner) banner.style.display = showBanner ? "block" : "none";
     var retakeBtn = document.getElementById("btn-retake-assessment");
     if (retakeBtn) {
@@ -8592,14 +8939,42 @@ function startScanSequence() {
       } catch (e2) {}
     }
 
+    var matchedEl = document.getElementById("dash-matched-skills");
+    if (!matchedEl) {
+      matchedEl = document.createElement("p");
+      matchedEl.id = "dash-matched-skills";
+      matchedEl.style.cssText =
+        "font-size:0.85rem;color:var(--text-secondary);" +
+        "margin:0.25rem 0 0.75rem;";
+      if (gapTitleEl && gapTitleEl.parentNode) {
+        gapTitleEl.parentNode.insertBefore(
+          matchedEl,
+          gapTitleEl.nextSibling
+        );
+      }
+    }
+    if (
+      gapR &&
+      Array.isArray(gapR.matchedSkills) &&
+      gapR.matchedSkills.length &&
+      matchedEl
+    ) {
+      matchedEl.textContent =
+        "✓ Already strong: " + gapR.matchedSkills.slice(0, 5).join(", ");
+      matchedEl.style.display = "block";
+    } else if (matchedEl) {
+      matchedEl.style.display = "none";
+    }
+
     var usedGapMissingBars = false;
     var seed;
     var skills;
     var readiness;
 
-    if (gapR && Array.isArray(gapR.missingSkills) && gapR.missingSkills.length) {
+    if (gapR && gapR.analysisSource === "openai" &&
+        Array.isArray(gapR.missingSkills) && gapR.missingSkills.length) {
       usedGapMissingBars = true;
-      var resumeBlob = (getResumeTextForGapApi() || "").toLowerCase();
+
       var examScoreNum = null;
       try {
         var esDash = localStorage.getItem("pathwayai_examScore");
@@ -8607,17 +8982,47 @@ function startScanSequence() {
       } catch (eExam) {}
       if (examScoreNum == null || isNaN(examScoreNum)) examScoreNum = null;
 
-      skills = gapR.missingSkills.map(function (sk) {
+      // Use GPT matchScore as the base proficiency level for this candidate
+      var gptMatch = Math.min(95, Math.max(10, Math.round(
+        gapR.finalScore != null ? Number(gapR.finalScore) :
+        gapR.matchScore != null ? Number(gapR.matchScore) : 50
+      )));
+
+      // prioritySkills get lowest scores (biggest gaps)
+      // other missingSkills get mid scores
+      var prioritySet = {};
+      if (Array.isArray(gapR.prioritySkills)) {
+        gapR.prioritySkills.forEach(function(s) {
+          prioritySet[String(s).toLowerCase()] = true;
+        });
+      }
+
+      skills = gapR.missingSkills.map(function(sk) {
         var nm = String(sk || "").trim();
         if (!nm) return null;
-        var inR = resumeBlob.indexOf(nm.toLowerCase()) !== -1;
-        var base = inR ? 65 : 25;
-        var pct = examScoreNum != null ? Math.round((base + examScoreNum) / 2) : base;
-        pct = Math.min(100, Math.max(0, pct));
-        var lbl = pct < 40 ? "Critical" : (pct <= 70 ? "Needs Work" : "Good");
-        var col = pct < 40 ? "#e5484d" : (pct <= 70 ? "#f76b15" : "#30a46c");
-        return { name: nm, pct: pct, gapLabel: lbl, barColor: col };
+        var isPriority = prioritySet[nm.toLowerCase()];
+
+        // Priority skills: lower base (bigger gap to address)
+        // Non-priority missing: slightly higher base
+        var base = isPriority ? Math.max(10, gptMatch - 35) : Math.max(20, gptMatch - 20);
+
+        // Blend with assessment score if available (assessment = 30% weight)
+        var pct = examScoreNum != null
+          ? Math.round((base * 0.7) + (examScoreNum * 0.3))
+          : base;
+        pct = Math.min(100, Math.max(5, pct));
+
+        var lbl = pct < 40 ? "Critical" : (pct <= 65 ? "Needs Work" : "Good");
+        var col = pct < 40 ? "#e5484d" : (pct <= 65 ? "#f76b15" : "#30a46c");
+        return { name: nm, pct: pct, gapLabel: lbl, barColor: col, isPriority: isPriority };
       }).filter(Boolean);
+
+      // Sort: priority skills first, then by pct ascending
+      skills.sort(function(a, b) {
+        if (a.isPriority && !b.isPriority) return -1;
+        if (!a.isPriority && b.isPriority) return 1;
+        return a.pct - b.pct;
+      });
 
       readiness = gapR.finalScore != null && !isNaN(Number(gapR.finalScore))
         ? Math.min(100, Math.max(0, Math.round(Number(gapR.finalScore))))
@@ -8701,7 +9106,36 @@ function startScanSequence() {
       ring.style.strokeDashoffset = offset;
     });
 
-    const mods = skills.slice().sort(function (a, b) { return a.pct - b.pct; });
+    // Use gap report prioritySkills for module cards when available
+    var mods;
+    if (gapR && gapR.analysisSource === "openai" &&
+        Array.isArray(gapR.prioritySkills) && gapR.prioritySkills.length) {
+      // Build module list from prioritySkills first, then other missingSkills
+      var priorityMods = gapR.prioritySkills.map(function(sk) {
+        var nm = String(sk || "").trim();
+        var existing = skills.find(function(s) {
+          return s.name.toLowerCase() === nm.toLowerCase();
+        });
+        return existing || { name: nm, pct: 25 };
+      });
+      var otherMods = (Array.isArray(gapR.missingSkills) ? gapR.missingSkills : [])
+        .filter(function(sk) {
+          var nm = String(sk || "").toLowerCase();
+          return !gapR.prioritySkills.some(function(p) {
+            return String(p).toLowerCase() === nm;
+          });
+        })
+        .map(function(sk) {
+          var nm = String(sk || "").trim();
+          var existing = skills.find(function(s) {
+            return s.name.toLowerCase() === nm.toLowerCase();
+          });
+          return existing || { name: nm, pct: 35 };
+        });
+      mods = priorityMods.concat(otherMods);
+    } else {
+      mods = skills.slice().sort(function(a, b) { return a.pct - b.pct; });
+    }
     document.getElementById("modules-grid").innerHTML = mods.map(function (m, i) {
       const diff = m.pct < 45 ? "beginner" : m.pct < 65 ? "intermediate" : "advanced";
       const diffLabel = diff.charAt(0).toUpperCase() + diff.slice(1);
@@ -8795,13 +9229,21 @@ function startScanSequence() {
 
     // Trigger AI module generation in background
     (async function() {
-      var currentSkills = skills.map(function(s) { return { name: s.name, pct: s.pct }; });
-      var aiModules = await generateAIModules(state.role || "general", currentSkills);
-      if (aiModules) {
-        state._aiModules = {};
-        aiModules.forEach(function(m) {
-          state._aiModules[m.skillName] = m;
+      // Use gap report skills if available for richer AI module content
+      var modulesInput;
+      if (gapR && gapR.analysisSource === "openai" &&
+          Array.isArray(gapR.prioritySkills) && gapR.prioritySkills.length) {
+        modulesInput = mods.map(function(s) {
+          return { name: s.name, pct: s.pct || 25 };
         });
+      } else {
+        modulesInput = skills.map(function(s) {
+          return { name: s.name, pct: s.pct };
+        });
+      }
+      var aiModules = await generateAIModules(state.role || "general", modulesInput);
+      if (aiModules) {
+        state._aiModules = aiModules;
       }
     })();
 
@@ -9095,16 +9537,25 @@ function startScanSequence() {
   }
 
   async function generateAIModules(role, skills) {
+    function modulesArrayToKeyedObject(modules) {
+      var aiModules = {};
+      (modules || []).forEach(function (mod) {
+        if (mod && mod.skillName) aiModules[mod.skillName] = mod;
+      });
+      return aiModules;
+    }
+    var skillsToSend = skills.slice(0, 5);
     // Check cache first — don't regenerate if same role+skills
-    var cacheKey = "pathwayai_ai_modules_" + role;
+    var CACHE_VERSION = "v2";
+    var cacheKey = "pathwayai_ai_modules_" + CACHE_VERSION + "_" + role;
     try {
       var cached = localStorage.getItem(cacheKey);
       if (cached) {
         var parsed = JSON.parse(cached);
-        // Cache valid if same skills count and generated within 24 hours
-        if (parsed.skills && parsed.skills.length === skills.length &&
-            parsed.generatedAt && (Date.now() - parsed.generatedAt) < 86400000) {
-          return parsed.modules;
+        var incomingNames = skills.slice(0, 5).map(function(s) { return s.name; }).sort().join(",");
+        var cachedNames = (parsed.skillNames || []).sort().join(",");
+        if (incomingNames === cachedNames && parsed.generatedAt && (Date.now() - parsed.generatedAt) < 86400000) {
+          return modulesArrayToKeyedObject(parsed.modules);
         }
       }
     } catch (e) {}
@@ -9113,26 +9564,26 @@ function startScanSequence() {
       var response = await fetch("/api/generate-modules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role: role, skills: skills })
+        body: JSON.stringify({ role: role, skills: skillsToSend })
       });
       var data = await response.json();
-      if (!response.ok || data.error) return buildMockAIModules(role, skills);
+      if (!response.ok || data.error) return modulesArrayToKeyedObject(buildMockAIModules(role, skills));
       var text = data.result ? String(data.result).trim() : "";
       if (text.startsWith("```")) {
         text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/m, "").trim();
       }
       var parsedOut = JSON.parse(text);
-      if (!parsedOut.modules || !parsedOut.modules.length) return buildMockAIModules(role, skills);
+      if (!parsedOut.modules || !parsedOut.modules.length) return modulesArrayToKeyedObject(buildMockAIModules(role, skills));
       // Save to cache
       localStorage.setItem(cacheKey, JSON.stringify({
         modules: parsedOut.modules,
-        skills: skills,
+        skillNames: skills.slice(0, 5).map(function(s) { return s.name; }),
         generatedAt: Date.now()
       }));
-      return parsedOut.modules;
+      return modulesArrayToKeyedObject(parsedOut.modules);
     } catch (e) {
       console.error("AI module generation failed:", e);
-      return buildMockAIModules(role, skills);
+      return modulesArrayToKeyedObject(buildMockAIModules(role, skills));
     }
   }
 
@@ -9214,6 +9665,44 @@ function generateSkillScores(seed) {
 
   restoreAuthFromStorage();
   hydrateFromStorage();
+
+  // Restore last screen if user has an active session
+  (function restoreLastScreen() {
+    try {
+      // Only restore if user is logged in (has email in state)
+      if (!state.email) return;
+
+      var lastScreen = localStorage.getItem("pathwayai_current_screen");
+      if (!lastScreen) return;
+
+      var RESTORABLE_SCREENS = [
+        "screen-2", "screen-3", "screen-4", "screen-4-5",
+        "screen-5", "screen-6", "screen-7"
+      ];
+      if (RESTORABLE_SCREENS.indexOf(lastScreen) === -1) return;
+
+      // For screen-6 and screen-7, verify dashboard data exists
+      if (lastScreen === "screen-6" || lastScreen === "screen-7") {
+        var hasDashboard = false;
+        try {
+          var snap = localStorage.getItem("pathwayai_state_v1");
+          if (snap) {
+            var parsed = JSON.parse(snap);
+            hasDashboard = !!(parsed && parsed.role);
+          }
+        } catch (e) {}
+        if (!hasDashboard) return;
+      }
+
+      // For screen-5, check role exists
+      if (lastScreen === "screen-5") {
+        if (!state.role) return;
+      }
+
+      showScreen(lastScreen);
+    } catch (e) {}
+  })();
+
   syncGoalFormFromState();
   setupAuthCard();
   bootstrapInsforgeSession();

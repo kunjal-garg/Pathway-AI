@@ -262,6 +262,96 @@ function normalizeParseResumeAiJson(resultStr) {
   }
 }
 
+async function resolveYoutubeVideo(query, skillName, lessonIdx, env) {
+  // 1. Build cache key
+  var cacheKey = "yt__" + skillName.toLowerCase().replace(/[^a-z0-9]/g, "_") + "__" + lessonIdx;
+
+  // 2. Check YOUTUBE_CACHE KV first
+  if (env.YOUTUBE_CACHE) {
+    try {
+      var cached = await env.YOUTUBE_CACHE.get(cacheKey);
+      if (cached) {
+        return JSON.parse(cached);
+      }
+    } catch (e) {}
+  }
+
+  // 3. Call YouTube Data API v3
+  if (!env.YOUTUBE_API_KEY) return null;
+  console.log("YT API key present:", !!env.YOUTUBE_API_KEY, "query:", query);
+  try {
+    var ytUrl = new URL("https://www.googleapis.com/youtube/v3/search");
+    ytUrl.searchParams.set("part", "snippet");
+    ytUrl.searchParams.set("q", query);
+    ytUrl.searchParams.set("type", "video");
+    ytUrl.searchParams.set("videoDuration", "medium"); // 4-20 mins
+    ytUrl.searchParams.set("relevanceLanguage", "en");
+    ytUrl.searchParams.set("maxResults", "5");
+    ytUrl.searchParams.set("key", env.YOUTUBE_API_KEY);
+
+    var ytCtrl = new AbortController();
+    var ytTimer = setTimeout(function() { ytCtrl.abort(); }, 5000);
+    var ytRes;
+    try {
+      ytRes = await fetch(ytUrl.toString(), { signal: ytCtrl.signal });
+    } finally {
+      clearTimeout(ytTimer);
+    }
+    var ytData = await ytRes.json();
+    console.log("YT API response status:", ytRes.status, "items:", ytData.items ? ytData.items.length : "none", "error:", ytData.error ? JSON.stringify(ytData.error) : "none");
+
+    if (!ytData.items || !ytData.items.length) return null;
+
+    // 4. Ask GPT to pick the best video for this role and skill
+    var candidates = ytData.items.map(function(item, i) {
+      return i + ": " + item.snippet.title + " by " + item.snippet.channelTitle;
+    }).join("\n");
+
+    var pickRes = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + env.OPENAI_API_KEY
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        max_tokens: 10,
+        messages: [
+          {
+            role: "user",
+            content: "Query was: \"" + query + "\"\nCandidates:\n" + candidates + "\nReply with only the index number (0-4) of the most educationally useful video for someone learning this skill."
+          }
+        ]
+      })
+    });
+    var pickData = await pickRes.json();
+    var pickedIdx = 0;
+    try {
+      pickedIdx = parseInt(pickData.choices[0].message.content.trim(), 10);
+      if (isNaN(pickedIdx) || pickedIdx < 0 || pickedIdx >= ytData.items.length) pickedIdx = 0;
+    } catch(e) { pickedIdx = 0; }
+
+    var chosen = ytData.items[pickedIdx];
+    var video = [{
+      title: chosen.snippet.title,
+      url: "https://www.youtube.com/watch?v=" + chosen.id.videoId,
+      channel: chosen.snippet.channelTitle,
+      duration: "Watch"
+    }];
+
+    // 5. Cache in KV for 30 days
+    if (env.YOUTUBE_CACHE) {
+      try {
+        await env.YOUTUBE_CACHE.put(cacheKey, JSON.stringify(video), { expirationTtl: 2592000 });
+      } catch(e) {}
+    }
+
+    return video;
+  } catch(e) {
+    return null;
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -459,7 +549,9 @@ ${cleanedResume}`,
         });
       }
 
-      const skillsList = skills
+      var jsskills = skills.slice(0, 5);
+
+      const skillsList = jsskills
         .map(function (s) {
           const name = s && s.name != null ? String(s.name) : "";
           const pct = s && s.pct != null ? Number(s.pct) : NaN;
@@ -469,38 +561,47 @@ ${cleanedResume}`,
         .filter(Boolean)
         .join(", ");
 
-      const userContent = `Generate learning modules for someone targeting the role of ${role}.
+      const userContent = `Generate learning modules for someone targeting the role of "${role}".
 They have skill gaps in these areas (lower % = bigger gap): ${skillsList}.
 
-For each skill, create a module with exactly 5 lessons in this structure:
-- Lesson 1 "Why This Matters": What this skill is, why it matters specifically for ${role}, one real job scenario where it is tested
-- Lesson 2 "Core Concepts": 3-4 key concepts with plain definitions, a specific article or docs URL to read (real URL like docs.docker.com, kubernetes.io, leetcode.com etc)
-- Lesson 3 "See It In Action": A practical walkthrough, a specific YouTube search query that would find a good tutorial (e.g. 'docker tutorial for beginners freeCodeCamp')
-- Lesson 4 "Hands-On Practice": A concrete exercise the user can actually do today (e.g. 'Go to leetcode.com/problems/two-sum and solve it', 'Set up a GitHub Actions workflow in a test repo')
-- Lesson 5 "Check Your Understanding": 3 quiz questions with 4 multiple choice options each and the correct answer index (0-3)
+For each skill, create a module with exactly 5 lessons. The content must be specific to "${role}" — 
+use tools, workflows, and scenarios that someone in this exact role would encounter day-to-day.
+
+Lesson structure for each of the 5 lessons:
+- Lesson 1 "Why This Matters": What this skill is, why it matters specifically for ${role}, one real scenario where it is tested in this role
+- Lesson 2 "Core Concepts": 3-4 key concepts with plain definitions relevant to ${role}, a specific real resource URL (docs, articles, guides)
+- Lesson 3 "See It In Action": A practical walkthrough of how this skill is used in a ${role} context, a specific YouTube search query that would find a relevant tutorial or talk for this role and skill
+- Lesson 4 "Hands-On Practice": A concrete exercise someone in a ${role} role can do today — specific and actionable with a real URL where possible
+- Lesson 5 "Check Your Understanding": Content reviewing the skill, plus a youtubeQuery for a more advanced or interview-prep video for this skill in the context of ${role}
+
+For the youtubeQuery fields: write a search query that a ${role} professional would use to find 
+a high-quality tutorial, talk, or walkthrough. Make it role-aware — 
+e.g. "product roadmap prioritization framework for PMs" not just "prioritization".
 
 Return ONLY this exact JSON structure:
 {
   "modules": [
     {
-      "skillName": "DevOps & Reliability",
+      "skillName": "string — must exactly match the skill name from input",
       "lessons": [
         {
-          "title": "Why This Matters",
+          "title": "string",
           "paragraphs": ["paragraph 1", "paragraph 2", "paragraph 3"],
           "takeaways": ["takeaway 1", "takeaway 2", "takeaway 3"],
-          "practice": "Specific concrete exercise with a real URL",
-          "resourceUrl": "https://real-url.com",
-          "resourceName": "Resource name",
-          "resourceDesc": "One sentence about what to read/do there",
-          "youtubeQuery": "specific search query for YouTube"
+          "practice": "string — specific actionable exercise with real URL where possible",
+          "resourceUrl": "string — real working URL",
+          "resourceName": "string",
+          "resourceDesc": "string — one sentence",
+          "youtubeQuery": "string — role-aware search query"
         }
       ],
       "quizQuestions": [
         {
-          "question": "Question text",
+          "question": "string",
           "options": ["A", "B", "C", "D"],
-          "correctIndex": 0
+          "correctIndex": 0,
+          "topic": "string — short topic label e.g. 'Stakeholder alignment'",
+          "explanation": "string — one sentence plain English explanation of why the correct answer is right"
         }
       ]
     }
@@ -508,11 +609,14 @@ Return ONLY this exact JSON structure:
 }
 
 Rules:
-- paragraphs must be specific to ${role} and this skill — mention real tools used in the industry
-- practice must have a real actionable step, not vague advice
-- resourceUrl must be a real working URL (docs, tutorials, leetcode, etc)
-- youtubeQuery should be specific enough to find a real useful video
-- quizQuestions must test real knowledge, not trivia`;
+- All content must be specific to the "${role}" role and domain — not generic
+- paragraphs must mention real tools or workflows used in "${role}" jobs
+- practice must be a concrete step, not vague advice
+- resourceUrl must be a real working URL
+- youtubeQuery must be role-aware and specific enough to find a useful video
+- quizQuestions must test real role-relevant knowledge, not trivia
+- topic and explanation are required on every quiz question — no nulls
+- Generate exactly 3 quiz questions per module`;
 
       const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
@@ -522,12 +626,12 @@ Rules:
         },
         body: JSON.stringify({
           model: "gpt-4o-mini",
-          max_tokens: 4000,
+          max_tokens: 6000,
           messages: [
             {
               role: "system",
               content:
-                "You are a career learning expert. Generate practical, job-focused learning modules for someone preparing for a real job. Focus on what hiring managers actually test for — real tools, real scenarios, not textbook theory. Always respond with raw JSON only. No markdown, no backticks.",
+                "You are a career learning expert who builds practical, role-specific learning modules. \nYour content must be appropriate for ANY professional role — engineering, product management, \ndesign, marketing, data, finance, operations, and more. \nFocus on what hiring managers actually test for in that specific role. \nUse real tools, real scenarios, and real workflows relevant to that domain. \nAlways respond with raw JSON only. No markdown, no backticks.",
             },
             {
               role: "user",
@@ -555,7 +659,7 @@ Rules:
         );
       }
 
-      const result =
+      let resultStr =
         aiData &&
         aiData.choices &&
         aiData.choices[0] &&
@@ -564,9 +668,56 @@ Rules:
           ? String(aiData.choices[0].message.content).trim()
           : "";
 
-      return new Response(JSON.stringify({ result }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      if (resultStr.startsWith("```")) {
+        resultStr = resultStr
+          .replace(/^```(?:json)?\s*/i, "")
+          .replace(/\s*```\s*$/m, "")
+          .trim();
+      }
+
+      var parsedOut;
+      try {
+        parsedOut = JSON.parse(resultStr);
+      } catch (e) {
+        return new Response(
+          JSON.stringify({ error: "Invalid JSON from model" }),
+          {
+            status: 502,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+
+      if (parsedOut && Array.isArray(parsedOut.modules)) {
+        var videoPromises = [];
+        parsedOut.modules.forEach(function(mod) {
+          if (mod && Array.isArray(mod.lessons)) {
+            mod.lessons.forEach(function(lesson, l) {
+              if (lesson && lesson.youtubeQuery) {
+                videoPromises.push(
+                  resolveYoutubeVideo(lesson.youtubeQuery, mod.skillName, l, env)
+                    .then(function(videos) {
+                      if (videos) lesson.youtubeVideos = videos;
+                    })
+                    .catch(function() {})
+                );
+              }
+            });
+          }
+        });
+        // Fire all in parallel, wait max 25 seconds
+        await Promise.race([
+          Promise.all(videoPromises),
+          new Promise(function(resolve) { setTimeout(resolve, 25000); })
+        ]);
+      }
+
+      return new Response(
+        JSON.stringify({ result: JSON.stringify(parsedOut) }),
+        {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     return new Response(JSON.stringify({ error: "Not found" }), {

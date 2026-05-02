@@ -707,7 +707,27 @@ function buildAdvisorPrompt(resumeData, jobProfile) {
   var experienceLines = experience.length
     ? experience.map(function (e) {
         if (!e || typeof e !== "object") return String(e || "");
-        return (e.role || "") + " at " + (e.company || "") + (e.duration ? " (" + e.duration + ")" : "");
+
+        // field names — new schema: title/start/end, old: role/duration
+        var title = (e.title || e.role || "").trim();
+        var company = (e.company || "").trim();
+        var start = (e.start || "").trim();
+        var end = (e.end || "").trim();
+        var duration = e.duration
+          ? String(e.duration).trim()
+          : start && end ? start + "–" + end : start || "";
+
+        // build bullets context if available
+        var bulletContext = "";
+        if (Array.isArray(e.bullets) && e.bullets.length) {
+          bulletContext = " [" + e.bullets.slice(0, 3).join("; ") + "]";
+        }
+
+        var line = title;
+        if (company) line += " at " + company;
+        if (duration) line += " (" + duration + ")";
+        line += bulletContext;
+        return line;
       })
     : [];
   if (!experienceLines.length && resumeData.experience && typeof resumeData.experience === "string") {
@@ -718,34 +738,75 @@ function buildAdvisorPrompt(resumeData, jobProfile) {
   var jobPref = Array.isArray(jobProfile.preferredSkills) ? jobProfile.preferredSkills : [];
   var jobResp = Array.isArray(jobProfile.responsibilities) ? jobProfile.responsibilities : [];
 
+  var assessmentCtx = "";
+  if (Array.isArray(jobProfile.assessmentAnswers) &&
+      jobProfile.assessmentAnswers.length > 0 &&
+      typeof jobProfile.assessmentScore === "number") {
+    assessmentCtx =
+      "\nAssessment score: " +
+      jobProfile.assessmentScore +
+      "/100 (candidate completed a role-specific skills assessment)\n";
+  } else if (jobProfile.skippedAssessment) {
+    assessmentCtx = "\nAssessment: not yet taken\n";
+  }
+
   return (
-    "You are a career advisor. Compare this resume and job posting.\n\n" +
-    "Resume skills: " +
+    "You are a senior career advisor and skills gap analyst.\n\n" +
+    "CANDIDATE PROFILE\n" +
+    "Skills: " +
     JSON.stringify(skills) +
     "\n" +
-    "Resume experience: " +
-    (experienceLines.length ? JSON.stringify(experienceLines) : "[] (none parsed)") +
-    "\n" +
-    "Job required skills: " +
+    "Experience:\n" +
+    (experienceLines.length
+      ? experienceLines.map(function (l) {
+          return "  - " + l;
+        }).join("\n")
+      : "  (none provided)") +
+    assessmentCtx +
+    "\n\n" +
+    "TARGET ROLE\n" +
+    "Required skills: " +
     JSON.stringify(jobReq) +
     "\n" +
-    "Job preferred skills: " +
+    "Preferred skills: " +
     JSON.stringify(jobPref) +
     "\n" +
-    "Job responsibilities: " +
+    "Responsibilities: " +
     JSON.stringify(jobResp) +
     "\n\n" +
-    "Return ONLY a JSON object with:\n" +
+    "INSTRUCTIONS\n" +
+    "Analyze the candidate's fit for this role. Be precise and realistic.\n" +
+    "- matchPercentage: honest 0-100 score based on skills AND experience depth\n" +
+    "- matchedSkills: skills the candidate has that the job requires\n" +
+    "- missingSkills: required/preferred skills the candidate lacks\n" +
+    "- prioritySkills: top 3 missing skills to learn first (highest job impact)\n" +
+    "- strengthSummary: 1 sentence on what makes this candidate strong for the role\n" +
+    "- gapSummary: 1 sentence on the biggest gap to address\n" +
+    "- weeklyRoadmap: 4-week plan, each week has focus (string) and " +
+    "resources (array of 2-3 specific resource names, not generic advice)\n" +
+    "- The following are TARGET COMPANIES the candidate wants to work at, NOT skills: " +
+    JSON.stringify(jobProfile.dreamCompanies || []) +
+    ". Never include these company names in missingSkills, " +
+    "prioritySkills, or matchedSkills under any circumstance.\n" +
+    "- missingSkills and prioritySkills must be concrete " +
+    "technical skills, tools, or technologies only. " +
+    "Never include soft skills such as: Communication, " +
+    "Leadership, Teamwork, Problem Solving, Critical Thinking, " +
+    "Collaboration, Interpersonal Skills, Time Management, " +
+    "Adaptability, Creativity, Work Ethic, Attention to Detail, " +
+    "Presentation Skills, Stakeholder Management, or any other " +
+    "non-technical competency. If a job posting mentions these, " +
+    "ignore them for gap analysis purposes.\n\n" +
+    "Return ONLY a raw JSON object. No markdown, no backticks, no explanation.\n" +
     "{\n" +
-    "  matchPercentage: number (0-100, be precise and realistic),\n" +
-    "  matchedSkills: string[],\n" +
-    "  missingSkills: string[],\n" +
-    "  prioritySkills: string[] (top 3 to learn first),\n" +
-    "  strengthSummary: string (1 sentence),\n" +
-    "  gapSummary: string (1 sentence),\n" +
-    "  weeklyRoadmap: [{ week: number, focus: string, resources: string[] }]\n" +
-    "}\n" +
-    "No explanation, JSON only."
+    '  "matchPercentage": number,\n' +
+    '  "matchedSkills": string[],\n' +
+    '  "missingSkills": string[],\n' +
+    '  "prioritySkills": string[],\n' +
+    '  "strengthSummary": string,\n' +
+    '  "gapSummary": string,\n' +
+    '  "weeklyRoadmap": [{"week": number, "focus": string, "resources": string[]}]\n' +
+    "}"
   );
 }
 
@@ -784,7 +845,17 @@ async function analyzeWithGPT(resumeData, jobProfile, openaiApiKey) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a senior career advisor. Always respond with raw JSON only. No markdown, no backticks, no explanation.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
         response_format: { type: "json_object" },
         temperature: 0.3,
       }),
@@ -993,9 +1064,30 @@ export async function onRequest(context) {
       (await Promise.race([jobProfilePromise, timeoutPromise])) ||
       getMockJobProfile(targetRole, dreamCompanies);
 
-    var resumeProfile = parseResumeSkills(
-      resumeText == null ? "" : String(resumeText)
-    );
+    var rawAssessmentScore = body.assessmentScore;
+    jobProfile.assessmentScore =
+      typeof rawAssessmentScore === "number" && !isNaN(rawAssessmentScore)
+        ? rawAssessmentScore
+        : null;
+    jobProfile.skippedAssessment = !!body.skippedAssessment;
+    jobProfile.assessmentAnswers = body.assessmentAnswers || [];
+    jobProfile.dreamCompanies = Array.isArray(body.dreamCompanies)
+      ? body.dreamCompanies
+      : [];
+
+    var resumeProfile;
+    if (
+      body.parsedResume &&
+      typeof body.parsedResume === "object" &&
+      Array.isArray(body.parsedResume.skills) &&
+      body.parsedResume.skills.length > 0
+    ) {
+      resumeProfile = body.parsedResume;
+    } else {
+      resumeProfile = parseResumeSkills(
+        resumeText == null ? "" : String(resumeText)
+      );
+    }
 
     var assessmentResults = {
       score: assessmentAnswers ? 70 : 50,
