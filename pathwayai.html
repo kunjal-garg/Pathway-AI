@@ -2602,6 +2602,7 @@
     scanLineTimer: null,
     _learningModule: null,
     _lessonIndex: 0,
+    _moduleRecoveryBadge: false,
     _resumePendingChooser: false,
     _resumeFileLabel: null,
   };
@@ -6440,6 +6441,24 @@ function startScanSequence() {
     return a;
   }
 
+  function shuffleAssessmentMcqOptions(optionsArr, correctIndex) {
+    var pairs = optionsArr.map(function (text, idx) {
+      return { text: text, isCorrect: idx === correctIndex };
+    });
+    for (var i = pairs.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = pairs[i];
+      pairs[i] = pairs[j];
+      pairs[j] = tmp;
+    }
+    var newCorrect = -1;
+    var out = pairs.map(function (p, k) {
+      if (p.isCorrect) newCorrect = k;
+      return p.text;
+    });
+    return { options: out, correctIndex: newCorrect };
+  }
+
   function pickInterviewBank(role) {
     var r = (role || "").toLowerCase();
     if (r.includes("software") || r.includes("backend") || r.includes("frontend") || r.includes("full stack") || r.includes("fullstack") || r.includes("mobile developer")) return INTERVIEW_BANKS.swe;
@@ -6510,6 +6529,7 @@ function startScanSequence() {
     state._assessCacheRole = role;
     state._assessCacheQuestions = assessQuestions.slice();
 
+    state._assessmentShuffledCorrect = [];
     state.assessmentAnswers = [];
     acEl.innerHTML = "";
     var oldF = document.getElementById("assess-results-footer");
@@ -6540,7 +6560,10 @@ function startScanSequence() {
       "</div>";
 
     var grid = wrap.querySelector(".assess-opt-grid");
-    item.o.forEach(function (text, oi) {
+    var shuffled = shuffleAssessmentMcqOptions(item.o, item.correct);
+    if (!state._assessmentShuffledCorrect) state._assessmentShuffledCorrect = [];
+    state._assessmentShuffledCorrect[index] = shuffled.correctIndex;
+    shuffled.options.forEach(function (text, oi) {
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className = "assess-opt-card";
@@ -6756,7 +6779,13 @@ function startScanSequence() {
     var correctCount = 0;
     for (var i = 0; i < ASSESS_TOTAL; i++) {
       var Q = assessQuestions[i];
-      if (Q && typeof Q.correct === "number" && state.assessmentAnswers[i] === Q.correct) {
+      var expected =
+        state._assessmentShuffledCorrect && typeof state._assessmentShuffledCorrect[i] === "number"
+          ? state._assessmentShuffledCorrect[i]
+          : Q && typeof Q.correct === "number"
+            ? Q.correct
+            : -1;
+      if (Q && typeof expected === "number" && expected >= 0 && state.assessmentAnswers[i] === expected) {
         correctCount++;
       }
     }
@@ -7371,6 +7400,112 @@ function startScanSequence() {
     bind(strip);
   }
 
+  var QUIZ_EXTRA_BANK = {
+    "DevOps & Reliability": [
+      { question: "Which tool is used for container orchestration at scale?", options: ["Jenkins", "Kubernetes", "Ansible", "Nagios"], correctIndex: 1 },
+      { question: "What does a liveness probe do in Kubernetes?", options: ["Monitors CPU usage", "Checks if a container should be restarted", "Scales pods automatically", "Manages secrets"], correctIndex: 1 },
+      { question: "What is the purpose of a Dockerfile?", options: ["To run containers", "To define the steps to build a Docker image", "To monitor containers", "To deploy to Kubernetes"], correctIndex: 1 },
+      { question: "Which command shows running Docker containers?", options: ["docker images", "docker ps", "docker run", "docker build"], correctIndex: 1 },
+      { question: "What does 'immutable infrastructure' mean?", options: ["Servers that cannot be monitored", "Infrastructure that is replaced rather than updated in place", "Infrastructure with no backups", "Servers that run 24/7"], correctIndex: 1 },
+      { question: "What is a rolling deployment?", options: ["Deploying to all servers at once", "Gradually replacing old instances with new ones to avoid downtime", "A backup strategy", "A testing approach"], correctIndex: 1 },
+      { question: "What does SRE stand for?", options: ["Software Release Engineering", "Site Reliability Engineering", "Server Runtime Environment", "Software Reliability Evaluation"], correctIndex: 1 }
+    ],
+    "Data Structures": [
+      { question: "What is the time complexity of binary search?", options: ["O(n)", "O(n²)", "O(log n)", "O(1)"], correctIndex: 2 },
+      { question: "Which data structure uses LIFO order?", options: ["Queue", "Stack", "Heap", "Graph"], correctIndex: 1 },
+      { question: "What is a hash collision?", options: ["When two keys hash to the same index", "When a hash table is full", "When a key is not found", "When two arrays are merged"], correctIndex: 0 },
+      { question: "What is the worst-case time complexity of quicksort?", options: ["O(n log n)", "O(n)", "O(n²)", "O(log n)"], correctIndex: 2 },
+      { question: "Which tree is self-balancing?", options: ["Binary Tree", "BST", "AVL Tree", "Trie"], correctIndex: 2 },
+      { question: "What does DFS stand for in graph traversal?", options: ["Data Flow Search", "Depth First Search", "Dynamic Function Scan", "Direct File System"], correctIndex: 1 },
+      { question: "What is a min-heap property?", options: ["Root is the largest element", "Root is the smallest element", "All leaves are at same level", "Tree is always balanced"], correctIndex: 1 }
+    ],
+    "System Design": [
+      { question: "What is a CDN used for?", options: ["Database replication", "Serving static assets from servers closer to users to reduce latency", "Encrypting user data", "Managing microservices"], correctIndex: 1 },
+      { question: "What does horizontal scaling mean?", options: ["Adding more RAM to one server", "Adding more servers to handle load", "Upgrading CPU", "Compressing data"], correctIndex: 1 },
+      { question: "What is eventual consistency?", options: ["All nodes are always in sync", "Replicas will converge to the same state given enough time", "A type of SQL transaction", "A caching strategy"], correctIndex: 1 },
+      { question: "What is the purpose of a message queue like Kafka?", options: ["To store user sessions", "To decouple services and handle async communication with durability", "To cache database results", "To serve static files"], correctIndex: 1 },
+      { question: "What is a circuit breaker pattern?", options: ["A hardware component", "Stops cascading failures by cutting off calls to a failing service", "A load balancing algorithm", "A database pattern"], correctIndex: 1 },
+      { question: "What does sharding a database mean?", options: ["Backing up data", "Splitting data across multiple database instances by a shard key", "Encrypting a database", "Replicating a database"], correctIndex: 1 },
+      { question: "What is rate limiting used for?", options: ["Speeding up API responses", "Preventing abuse by limiting how many requests a client can make in a time window", "Caching API responses", "Authenticating users"], correctIndex: 1 }
+    ],
+    "SQL & Data Modeling": [
+      { question: "What does INNER JOIN return?", options: ["All rows from left table", "All rows from right table", "Only rows with matching values in both tables", "All rows from both tables"], correctIndex: 2 },
+      { question: "What is a primary key?", options: ["Any column in a table", "A column that uniquely identifies each row and cannot be NULL", "A foreign key reference", "An indexed column"], correctIndex: 1 },
+      { question: "What does GROUP BY do?", options: ["Sorts results", "Aggregates rows that have the same value in specified columns", "Filters rows", "Joins tables"], correctIndex: 1 },
+      { question: "What is a NULL value in SQL?", options: ["Zero", "An empty string", "The absence of a value — unknown or missing data", "False"], correctIndex: 2 },
+      { question: "What does DISTINCT do in a SELECT?", options: ["Sorts results", "Returns only unique values, removing duplicates", "Filters rows", "Counts rows"], correctIndex: 1 },
+      { question: "What is an index in a database?", options: ["A list of all tables", "A data structure that speeds up data retrieval at the cost of additional write overhead", "A backup copy", "A foreign key"], correctIndex: 1 },
+      { question: "What is normalization in databases?", options: ["Making numbers positive", "Organizing data to reduce redundancy and improve data integrity", "Sorting data", "Encrypting data"], correctIndex: 1 }
+    ],
+    "Machine Learning Basics": [
+      { question: "What is overfitting?", options: ["Model performs poorly on training data", "Model performs well on training but poorly on new data", "Model is too simple", "Model has too few parameters"], correctIndex: 1 },
+      { question: "What is the purpose of a validation set?", options: ["To train the model", "To tune hyperparameters without touching the test set", "To clean data", "To visualize results"], correctIndex: 1 },
+      { question: "What is one-hot encoding used for?", options: ["Normalizing numeric features", "Converting categorical variables into binary columns for ML models", "Removing outliers", "Splitting data"], correctIndex: 1 },
+      { question: "What is a confusion matrix?", options: ["A tool to visualize feature importance", "A table showing TP, FP, TN, FN to evaluate classifier performance", "A loss function", "A regularization technique"], correctIndex: 1 },
+      { question: "What does dropout do in neural networks?", options: ["Speeds up training", "Randomly disables neurons during training to prevent overfitting", "Adds more layers", "Initializes weights"], correctIndex: 1 },
+      { question: "What is transfer learning?", options: ["Moving data between servers", "Using a pre-trained model as a starting point for a new task", "Training a model from scratch", "A type of ensemble method"], correctIndex: 1 },
+      { question: "What is the difference between supervised and unsupervised learning?", options: ["No difference", "Supervised uses labeled data to learn a mapping; unsupervised finds patterns in unlabeled data", "Unsupervised is always better", "Supervised learning cannot use neural networks"], correctIndex: 1 }
+    ]
+  };
+
+  function buildGenericExtraQuestions(skillName) {
+    var s = skillName;
+    return [
+      { question: "Which best describes a foundational concept in " + s + "?", options: ["Ignoring tradeoffs", "Building reliable understanding before advanced topics", "Skipping practice", "Avoiding feedback"], correctIndex: 1 },
+      { question: "Why is structured practice important for " + s + "?", options: ["It replaces theory entirely", "It turns concepts into durable skills through repetition", "It only matters for beginners", "It is optional"], correctIndex: 1 },
+      { question: "When learning " + s + ", what is a good first step?", options: ["Memorize jargon only", "Clarify goals and map prerequisites", "Skip fundamentals", "Avoid examples"], correctIndex: 1 },
+      { question: "How should you handle gaps while studying " + s + "?", options: ["Ignore them", "Note them and revisit with targeted exercises", "Assume they will disappear", "Only read blogs"], correctIndex: 1 },
+      { question: "What makes feedback valuable for " + s + "?", options: ["It must be only positive", "It highlights mistakes and guides correction", "It should be avoided", "It replaces self-study"], correctIndex: 1 },
+      { question: "In " + s + ", why define success criteria early?", options: ["To make learning slower", "To know what good looks like and measure progress", "To avoid planning", "To impress others only"], correctIndex: 1 },
+      { question: "Which habit supports long-term growth in " + s + "?", options: ["Only cramming before deadlines", "Regular review and applying concepts to real tasks", "Avoiding documentation", "Working in isolation only"], correctIndex: 1 }
+    ];
+  }
+
+  function buildExtendedQuizQuestions(moduleName, baseQuestions) {
+    var baseTrim = (baseQuestions || []).filter(function (q) {
+      return q && q.options && q.options.length;
+    }).slice(0, 3);
+    var bank = QUIZ_EXTRA_BANK[moduleName] || buildGenericExtraQuestions(moduleName);
+    var needExtra = 10 - baseTrim.length;
+    var extras = bank.slice(0, Math.min(7, needExtra));
+    var combined = baseTrim.concat(extras);
+    var genPool = buildGenericExtraQuestions(moduleName);
+    var gi = 0;
+    while (combined.length < 10 && gi < genPool.length * 3) {
+      combined.push(genPool[gi % genPool.length]);
+      gi++;
+    }
+    combined = combined.slice(0, 10);
+    for (var i = combined.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = combined[i];
+      combined[i] = combined[j];
+      combined[j] = t;
+    }
+    return combined;
+  }
+
+  function shuffleQuizOptions(question) {
+    var pairs = question.options.map(function (text, idx) {
+      return { text: text, isCorrect: idx === question.correctIndex };
+    });
+    for (var i = pairs.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var tmp = pairs[i];
+      pairs[i] = pairs[j];
+      pairs[j] = tmp;
+    }
+    var correctIndex = -1;
+    for (var k = 0; k < pairs.length; k++) {
+      if (pairs[k].isCorrect) correctIndex = k;
+    }
+    return {
+      question: question.question,
+      options: pairs.map(function (p) { return p.text; }),
+      correctIndex: correctIndex
+    };
+  }
+
   function renderModuleMain(moduleName, lessonIdx) {
     var main = document.getElementById("module-lesson-main");
     if (!main) return;
@@ -7402,22 +7537,33 @@ function startScanSequence() {
     var quizBlock = "";
     var quizAnswers = null;
     var qsQuizRef = null;
-    if (lessonIdx === 4 && state._aiModules && state._aiModules[moduleName] && state._aiModules[moduleName].quizQuestions && state._aiModules[moduleName].quizQuestions.length) {
-      qsQuizRef = state._aiModules[moduleName].quizQuestions;
-      quizAnswers = qsQuizRef.map(function () { return null; });
-      quizBlock = "<div id=\"module-quiz-root\" style=\"margin-top:1.25rem;padding:1rem;border-radius:8px;background:var(--card-bg);border:1px solid rgba(255,255,255,0.08);\">" +
-        "<h4 style=\"font-size:0.95rem;margin:0 0 0.75rem;color:var(--cyan);\">Module quiz</h4>";
-      for (var qi = 0; qi < qsQuizRef.length; qi++) {
-        var qItem = qsQuizRef[qi];
-        if (!qItem || !qItem.options || !qItem.options.length) continue;
-        quizBlock += "<div data-quiz-section=\"" + qi + "\" style=\"margin-bottom:1rem;\"><p style=\"margin:0 0 0.5rem;font-weight:700;color:var(--text-muted);\">" + escapeHtml(qItem.question) + "</p>";
-        for (var oi = 0; oi < qItem.options.length; oi++) {
-          quizBlock += "<div tabindex=\"0\" role=\"button\" data-quiz-q=\"" + qi + "\" data-quiz-o=\"" + oi + "\" style=\"padding:10px 14px;border-radius:8px;cursor:pointer;margin-bottom:6px;background:var(--card-bg);border:1.5px solid transparent;color:var(--text-muted);\">" + escapeHtml(qItem.options[oi]) + "</div>";
+    if (lessonIdx === 4 && state._aiModules && state._aiModules[moduleName]) {
+      var rawQuizList = state._aiModules[moduleName].quizQuestions || [];
+      var builtQuiz = buildExtendedQuizQuestions(moduleName, rawQuizList);
+      if (builtQuiz.length) {
+        qsQuizRef = builtQuiz.map(function (q) { return shuffleQuizOptions(q); });
+        quizAnswers = qsQuizRef.map(function () { return null; });
+        var quizTotal = qsQuizRef.length;
+        quizBlock = "<div id=\"module-quiz-root\" style=\"margin-top:1.25rem;padding:1rem;border-radius:8px;background:var(--card-bg);border:1px solid rgba(255,255,255,0.08);\">" +
+          "<h4 style=\"font-size:0.95rem;margin:0 0 0.75rem;color:var(--cyan);\">Module Quiz — test your understanding</h4>" +
+          "<div style=\"margin-bottom:0.75rem;\">" +
+          "<div style=\"font-size:0.8rem;color:var(--text-muted);margin-bottom:4px;\"><span id=\"module-quiz-progress-label\">0 of " + quizTotal + " answered</span></div>" +
+          "<div style=\"height:8px;border-radius:4px;background:rgba(255,255,255,0.1);overflow:hidden;\">" +
+          "<div id=\"module-quiz-progress-fill\" style=\"height:100%;width:0%;background:var(--cyan);transition:width 0.2s ease;\"></div></div></div>";
+        for (var qi = 0; qi < qsQuizRef.length; qi++) {
+          var qItem = qsQuizRef[qi];
+          if (!qItem || !qItem.options || !qItem.options.length) continue;
+          quizBlock += "<div data-quiz-section=\"" + qi + "\" style=\"margin-bottom:1rem;\">" +
+            "<p style=\"margin:0 0 0.35rem;font-size:0.8rem;color:var(--text-muted);\">Question " + (qi + 1) + " of " + quizTotal + "</p>" +
+            "<p style=\"margin:0 0 0.5rem;font-weight:700;color:var(--text-muted);\">" + escapeHtml(qItem.question) + "</p>";
+          for (var oi = 0; oi < qItem.options.length; oi++) {
+            quizBlock += "<div tabindex=\"0\" role=\"button\" data-quiz-q=\"" + qi + "\" data-quiz-o=\"" + oi + "\" style=\"padding:10px 14px;border-radius:8px;cursor:pointer;margin-bottom:6px;background:var(--card-bg);border:1.5px solid transparent;color:var(--text-muted);\">" + escapeHtml(qItem.options[oi]) + "</div>";
+          }
+          quizBlock += "</div>";
         }
-        quizBlock += "</div>";
+        quizBlock += "<button type=\"button\" class=\"btn btn-primary\" id=\"btn-module-quiz-submit\" style=\"margin-top:0.5rem;\">Submit Quiz</button>" +
+          "<div id=\"module-quiz-result\" style=\"margin-top:0.75rem;font-size:0.9rem;color:var(--text-muted);\"></div></div>";
       }
-      quizBlock += "<button type=\"button\" class=\"btn btn-primary\" id=\"btn-module-quiz-submit\" style=\"margin-top:0.5rem;\">Submit Quiz</button>" +
-        "<div id=\"module-quiz-result\" style=\"margin-top:0.75rem;font-size:0.9rem;color:var(--text-muted);\"></div></div>";
     }
     main.innerHTML = banner +
       "<h3 style=\"margin:0 0 0.75rem;font-size:1.05rem;\">Lesson " + (lessonIdx + 1) + " — " + escapeHtml(LESSON_NAV_LABELS[lessonIdx]) + "</h3>" +
@@ -7459,6 +7605,18 @@ function startScanSequence() {
         renderModuleScreen(moduleName);
       }
     });
+    function updateModuleQuizProgress() {
+      var label = document.getElementById("module-quiz-progress-label");
+      var fill = document.getElementById("module-quiz-progress-fill");
+      if (!label || !fill || !quizAnswers) return;
+      var n = 0;
+      for (var pi = 0; pi < quizAnswers.length; pi++) {
+        if (quizAnswers[pi] !== null && quizAnswers[pi] !== undefined) n++;
+      }
+      var total = quizAnswers.length;
+      label.textContent = n + " of " + total + " answered";
+      fill.style.width = total ? (100 * n / total) + "%" : "0%";
+    }
     var quizSubmitBtn = document.getElementById("btn-module-quiz-submit");
     var quizRootEl = document.getElementById("module-quiz-root");
     if (quizRootEl && quizAnswers && qsQuizRef && quizAnswers.length === qsQuizRef.length) {
@@ -7476,7 +7634,9 @@ function startScanSequence() {
         }
         opt.style.border = "1.5px solid var(--cyan)";
         quizAnswers[qi] = oi;
+        updateModuleQuizProgress();
       });
+      updateModuleQuizProgress();
     }
     if (quizSubmitBtn && qsQuizRef && qsQuizRef.length && quizAnswers) {
       quizSubmitBtn.addEventListener("click", function () {
@@ -7494,7 +7654,8 @@ function startScanSequence() {
           var exp = qsQuizRef[qix].correctIndex;
           if (picked === exp) correct++;
         }
-        var pass = correct >= 2;
+        var passThreshold = Math.max(2, Math.ceil(total * 2 / 3));
+        var pass = correct >= passThreshold;
         var msg = pass ? "Great work! Module complete." : "We'll add a recovery module to your dashboard";
         if (!pass) {
           try {
@@ -7518,7 +7679,15 @@ function startScanSequence() {
     state._learningModule = moduleName;
     var titleEl = document.getElementById("module-screen-title");
     var progEl = document.getElementById("module-progress-label");
-    if (titleEl) titleEl.textContent = moduleName;
+    if (titleEl) {
+      if (state._moduleRecoveryBadge) {
+        titleEl.innerHTML =
+          "<span style=\"background:#e5484d;color:#fff;font-size:0.65rem;font-weight:700;padding:2px 8px;border-radius:20px;letter-spacing:0.05em;vertical-align:middle;margin-right:0.5rem;\">RECOVERY</span>" +
+          "<span style=\"vertical-align:middle;\">" + escapeHtml(moduleName) + "</span>";
+      } else {
+        titleEl.textContent = moduleName;
+      }
+    }
     var counts = moduleProgressCounts(moduleName);
     if (progEl) progEl.textContent = counts.done + " of 5 lessons complete";
     var li = Math.max(0, Math.min(4, typeof state._lessonIndex === "number" ? state._lessonIndex : 0));
@@ -7529,7 +7698,14 @@ function startScanSequence() {
   }
 
   function openModule(moduleName) {
-    state._learningModule = moduleName;
+    var raw = String(moduleName || "");
+    if (raw.indexOf("RECOVERY: ") === 0) {
+      state._learningModule = raw.slice("RECOVERY: ".length).trim();
+      state._moduleRecoveryBadge = true;
+    } else {
+      state._learningModule = raw;
+      state._moduleRecoveryBadge = false;
+    }
     state._lessonIndex = 0;
     showScreen("screen-module");
   }
@@ -7539,6 +7715,20 @@ function startScanSequence() {
     let h = 0;
     for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
     return Math.abs(h);
+  }
+
+  function getRecoveryModules() {
+    var recovery = [];
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var key = localStorage.key(i);
+        if (key && key.startsWith("pathwayai_recovery_")) {
+          var skillName = decodeURIComponent(key.replace("pathwayai_recovery_", ""));
+          recovery.push(skillName);
+        }
+      }
+    } catch (e) {}
+    return recovery;
   }
 
   function renderDashboard() {
@@ -7719,14 +7909,25 @@ function startScanSequence() {
 
     const mods = skills.slice().sort(function (a, b) { return a.pct - b.pct; });
     document.getElementById("modules-grid").innerHTML = mods.map(function (m, i) {
-      const diff = m.pct < 45 ? "advanced" : m.pct < 65 ? "intermediate" : "beginner";
+      const diff = m.pct < 45 ? "beginner" : m.pct < 65 ? "intermediate" : "advanced";
       const diffLabel = diff.charAt(0).toUpperCase() + diff.slice(1);
       const hours = 3 + ((seed + i * 7) % 10);
       var prog = moduleProgressCounts(m.name);
       var encName = encodeURIComponent(m.name);
+      var cardDesc = "";
+      if (state._aiModules && state._aiModules[m.name] &&
+          state._aiModules[m.name].lessons &&
+          state._aiModules[m.name].lessons[0] &&
+          state._aiModules[m.name].lessons[0].paragraphs &&
+          state._aiModules[m.name].lessons[0].paragraphs[0]) {
+        cardDesc = state._aiModules[m.name].lessons[0].paragraphs[0].slice(0, 120) + "...";
+      } else {
+        cardDesc = "Build real " + m.name + " skills tested in " +
+          (state.role || "your role") + " interviews.";
+      }
       return "<div class=\"module-card\">" +
         "<h4>" + escapeHtml(m.name) + "</h4>" +
-        "<p class=\"desc\">Targeted drills and projects to lift this competency based on your assessment & goals.</p>" +
+        "<p class=\"desc\">" + escapeHtml(cardDesc) + "</p>" +
         "<div class=\"module-meta\">" +
         "<span style=\"color:var(--text-muted);\">~" + hours + " hrs</span>" +
         "<span class=\"diff-badge " + diff + "\">" + diffLabel + "</span>" +
@@ -7738,6 +7939,58 @@ function startScanSequence() {
         "<button type=\"button\" class=\"btn btn-primary btn-block module-start-btn\" data-module-name=\"" + encName + "\">Start</button>" +
         "</div>";
     }).join("");
+
+    var recoverySkills = getRecoveryModules();
+    if (recoverySkills.length > 0) {
+      var recoverySection = document.getElementById("recovery-modules-section");
+      if (!recoverySection) {
+        recoverySection = document.createElement("div");
+        recoverySection.id = "recovery-modules-section";
+        recoverySection.style.cssText = "margin-top:2rem;";
+        var grid = document.getElementById("modules-grid");
+        grid.parentNode.insertBefore(recoverySection, grid.nextSibling);
+      }
+      recoverySection.innerHTML =
+        "<h3 style='font-size:1rem;margin:0 0 1rem;color:var(--text-muted);'>" +
+        "⚠️ Recovery modules — revisit these topics</h3>" +
+        "<div class='modules-grid'>" +
+        recoverySkills.map(function (skillName) {
+          var encName = encodeURIComponent("RECOVERY: " + skillName);
+          return "<div class='module-card' style='border:1.5px solid #e5484d;'>" +
+            "<div style='display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;'>" +
+            "<span style='background:#e5484d;color:#fff;font-size:0.65rem;font-weight:700;" +
+            "padding:2px 8px;border-radius:20px;letter-spacing:0.05em;'>RECOVERY</span>" +
+            "<h4 style='margin:0;'>" + escapeHtml(skillName) + "</h4></div>" +
+            "<p class='desc'>You scored below the passing threshold on this module quiz. " +
+            "Review the core concepts and try again.</p>" +
+            "<div class='module-meta'>" +
+            "<span style='color:var(--text-muted);'>~30 min review</span>" +
+            "<span class='diff-badge beginner'>Review</span></div>" +
+            "<button type='button' class='btn btn-primary btn-block module-start-btn' " +
+            "data-module-name='" + encName + "'>Retry Module</button>" +
+            "</div>";
+        }).join("") +
+        "</div>";
+      if (!recoverySection.dataset.moduleClickBound) {
+        recoverySection.dataset.moduleClickBound = "1";
+        recoverySection.addEventListener("click", function (e) {
+          var btn = e.target && e.target.closest && e.target.closest(".module-start-btn");
+          if (!btn || !recoverySection.contains(btn)) return;
+          var raw = btn.getAttribute("data-module-name");
+          if (!raw) return;
+          try {
+            openModule(decodeURIComponent(raw));
+          } catch (err) {
+            openModule(raw);
+          }
+        });
+      }
+    } else {
+      var rmSec = document.getElementById("recovery-modules-section");
+      if (rmSec && rmSec.parentNode) {
+        rmSec.parentNode.removeChild(rmSec);
+      }
+    }
 
     // Trigger AI module generation in background
     (async function() {
