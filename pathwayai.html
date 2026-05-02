@@ -2344,11 +2344,22 @@
     <!-- Screen 6 -->
     <section id="screen-6" class="screen" data-step="5" aria-label="Learning dashboard">
       <div class="dash-layout">
-        <div id="dash-assess-banner" class="stat-card" style="display:none;margin:1rem 1rem 0;padding:0.9rem 1rem;border-color:rgba(6,182,212,0.45);background:rgba(6,182,212,0.06);">
-          <strong style="color:var(--cyan);">Take the assessment for a more accurate roadmap.</strong>
-          <p style="margin:0.25rem 0 0;color:var(--text-muted);font-size:0.9rem;">Your current roadmap is based on resume/profile signals only.</p>
-        </div>
         <main class="dash-main">
+          <div id="dash-assess-banner" class="stat-card" style="display:none;margin:0 0 1rem;padding:0.9rem 1rem;border-color:rgba(6,182,212,0.45);background:rgba(6,182,212,0.06);">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+              <div>
+                <strong style="color:var(--cyan);">
+                  Take the assessment for a more accurate roadmap.
+                </strong>
+                <p style="margin:0.25rem 0 0;color:var(--text-muted);font-size:0.9rem;">
+                  Your current roadmap is based on resume/profile signals only.
+                </p>
+              </div>
+              <button type="button" class="btn btn-primary" id="btn-banner-take-assessment" style="flex-shrink:0;white-space:nowrap;">
+                Take Assessment →
+              </button>
+            </div>
+          </div>
           <div class="dash-header-block">
             <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:0.25rem;">
               <div>
@@ -2356,7 +2367,7 @@
                 <span class="role-badge" id="dash-role-badge">Product Manager</span>
                 <p id="dash-analyse-context" style="margin:0.35rem 0 0;font-size:0.85rem;color:var(--text-muted);line-height:1.4;"></p>
               </div>
-              <button type="button" class="btn btn-secondary" id="btn-retake-assessment" style="flex-shrink:0;">Retake Assessment</button>
+              <button type="button" class="btn btn-secondary" id="btn-retake-assessment" style="display:none;flex-shrink:0;">Retake Assessment</button>
             </div>
           </div>
           <div class="stat-card" id="dash-ai-insights" style="display:none;margin:0 0 1rem;padding:0.9rem 1rem;border-color:rgba(83,74,183,0.35);">
@@ -2393,7 +2404,7 @@
             <strong style="font-size:0.95rem;">Weekly goal</strong>
             <p id="dash-weekly-focus" style="color:var(--text-muted);font-size:0.85rem;margin:0.35rem 0 0;">Complete 3 lessons this week</p>
             <div class="track-bar"><div class="track-fill" id="weekly-fill"></div></div>
-            <p style="font-size:0.8rem;color:var(--text-muted);margin-top:0.5rem;"><span id="weekly-done">2</span> of 3 done</p>
+            <p id="weekly-status-line" style="font-size:0.8rem;color:var(--text-muted);margin-top:0.5rem;"><span id="weekly-done">0</span> of 3 done</p>
           </div>
         </aside>
       </div>
@@ -3298,6 +3309,18 @@ function clearAllAppStorage() {
   }
 function assessmentMatchesSession(c) {
     return !!(c && c.version === 1 && c.email === state.email && c.role === state.role);
+  }
+
+  function hasEverTakenAssessment() {
+    try {
+      var cached = loadAssessmentStorage();
+      if (cached && assessmentMatchesSession(cached)) return true;
+    } catch (e) {}
+    try {
+      var es = localStorage.getItem("pathwayai_examScore");
+      if (es != null && String(es).trim() !== "") return true;
+    } catch (e2) {}
+    return false;
   }
 
   const screens = ["screen-1", "screen-2", "screen-3", "screen-4", "screen-4-ready", "screen-5", "screen-6", "screen-module"];
@@ -6853,6 +6876,58 @@ function startScanSequence() {
     } catch (e) {}
   }
 
+  function getWeeklyLessonCount() {
+    var total = 0;
+    try {
+      var prog = loadModuleProgress();
+      if (prog && typeof prog === "object") {
+        Object.keys(prog).forEach(function (k) {
+          var arr = prog[k];
+          if (Array.isArray(arr)) {
+            total += arr.filter(function (n) {
+              return typeof n === "number" && n >= 0 && n < 5;
+            }).length;
+          }
+        });
+      }
+    } catch (e) {}
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var key = localStorage.key(i);
+        if (!key || key.indexOf("pathwayai_progress_") !== 0) continue;
+        var raw = localStorage.getItem(key);
+        if (!raw) continue;
+        var parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          total += parsed.filter(function (n) {
+            return typeof n === "number" && n >= 0 && n < 5;
+          }).length;
+        }
+      }
+    } catch (e2) {}
+    return total;
+  }
+
+  function updateWeeklyGoalDisplay() {
+    var total = getWeeklyLessonCount();
+    var goal = 3;
+    var capped = Math.min(total, goal);
+    var fillPct = Math.min(100, (capped / goal) * 100);
+    var weeklyFill = document.getElementById("weekly-fill");
+    var wkFocus = document.getElementById("dash-weekly-focus");
+    var statusLine = document.getElementById("weekly-status-line");
+    if (weeklyFill) weeklyFill.style.width = fillPct + "%";
+    if (wkFocus) wkFocus.textContent = "Complete 3 lessons this week";
+    if (statusLine) {
+      if (total >= goal) {
+        statusLine.innerHTML = '<span style="color:var(--cyan);">3 of 3 done ✓</span>';
+      } else {
+        statusLine.innerHTML =
+          '<span id="weekly-done">' + total + '</span> of 3 done';
+      }
+    }
+  }
+
   function loadModuleSkillBoostMap() {
     try {
       var raw = localStorage.getItem(MODULE_LS_BOOST);
@@ -6890,6 +6965,9 @@ function startScanSequence() {
     if (arr.length >= 5) {
       applyModuleCompletionBoost(moduleName);
     }
+    try {
+      updateWeeklyGoalDisplay();
+    } catch (eWk) {}
   }
 
   function applyModuleCompletionBoost(moduleName) {
@@ -7868,8 +7946,12 @@ function startScanSequence() {
   }
 
   function renderDashboard() {
-    const name = state.displayName || "there";
-    document.getElementById("dash-greeting").textContent = "Here's your roadmap, " + name + ".";
+    var resumeParsed = typeof getActiveResumeParsed === "function" ? getActiveResumeParsed() : null;
+    var inferredName =
+      resumeParsed && resumeParsed.name && resumeParsed.name !== "Not detected" ? resumeParsed.name : null;
+    var name = inferredName || state.displayName || "there";
+    var firstName = String(name).split(" ")[0];
+    document.getElementById("dash-greeting").textContent = "Here's your roadmap, " + firstName + ".";
     document.getElementById("dash-role-badge").textContent = state.role || "Your role";
 
     const dreamCompanies = JSON.parse(
@@ -7911,7 +7993,13 @@ function startScanSequence() {
     var st = loadAppState() || {};
     var banner = document.getElementById("dash-assess-banner");
     var skippedFlow = !!st.skippedAssessment || localStorage.getItem("pathwayai_skipAssessment") === "true";
-    if (banner) banner.style.display = skippedFlow ? "block" : "none";
+    var takenBefore = hasEverTakenAssessment();
+    var showBanner = skippedFlow || !takenBefore;
+    if (banner) banner.style.display = showBanner ? "block" : "none";
+    var retakeBtn = document.getElementById("btn-retake-assessment");
+    if (retakeBtn) {
+      retakeBtn.style.display = takenBefore ? "inline-flex" : "none";
+    }
 
     var payload = state.persistedDashboard;
     if (!payload || !payload.skills || !payload.skills.length) {
@@ -8147,12 +8235,9 @@ function startScanSequence() {
       }
     })();
 
-    document.getElementById("weekly-fill").style.width = "66%";
-
     var ins = document.getElementById("dash-ai-insights");
     var st = document.getElementById("dash-strength-line");
     var gl = document.getElementById("dash-gap-line");
-    var wk = document.getElementById("dash-weekly-focus");
     if (ins && st && gl) {
       if (gapR && gapR.analysisSource === "openai" && (gapR.strengthSummary || gapR.gapSummary)) {
         ins.style.display = "block";
@@ -8164,11 +8249,7 @@ function startScanSequence() {
         gl.textContent = "";
       }
     }
-    if (wk && gapR && Array.isArray(gapR.weeklyRoadmap) && gapR.weeklyRoadmap[0] && gapR.weeklyRoadmap[0].focus) {
-      wk.textContent = String(gapR.weeklyRoadmap[0].focus);
-    } else if (wk) {
-      wk.textContent = "Complete 3 lessons this week";
-    }
+    updateWeeklyGoalDisplay();
   }
 
   function mockResourceUrlForSkill(skillName) {
@@ -8574,6 +8655,18 @@ function generateSkillScores(seed) {
     state._assessCacheQuestions = null;
     showScreen("screen-5", { skipAssessmentCache: true });
   });
+
+  var bannerBtn = document.getElementById("btn-banner-take-assessment");
+  if (bannerBtn && !bannerBtn.dataset.bound) {
+    bannerBtn.dataset.bound = "1";
+    bannerBtn.addEventListener("click", function () {
+      try {
+        localStorage.setItem("pathwayai_skipAssessment", "false");
+      } catch (e) {}
+      saveAppState({ skippedAssessment: false });
+      showScreen("screen-5", { skipAssessmentCache: true });
+    });
+  }
 
   (function setupModuleLearningUi() {
     var grid = document.getElementById("modules-grid");
